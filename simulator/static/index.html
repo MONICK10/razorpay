@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Finance Controller — Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --surface: #fcfcfb; --page: #f2f2ef; --text: #0b0b0b; --text2: #52514e;
+    --muted: #898781; --grid: #e1e0d9; --border: #d8d7cf;
+    --good: #0ca30c; --warning: #c98600; --critical: #d03b3b; --blue: #2a78d6;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+  }
+  header {
+    display: flex; align-items: center; gap: 24px; padding: 14px 20px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10; flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; white-space: nowrap; }
+  header .tagline { color: var(--muted); font-size: 12px; margin-right: auto; }
+  .dial-box { display: flex; align-items: center; gap: 10px; }
+  .dial-box label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; }
+  .dial-box input[type=range] { width: 160px; }
+  .dial-value { font-family: var(--mono); font-weight: 600; min-width: 28px; display: inline-block; }
+  .kpi-strip { display: flex; gap: 14px; }
+  .kpi { text-align: right; }
+  .kpi .n { font-family: var(--mono); font-weight: 600; font-size: 15px; }
+  .kpi .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .kpi.highlight .n { color: var(--blue); }
+  button.reset-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--text2);
+  }
+  button.reset-btn:hover { border-color: var(--critical); color: var(--critical); }
+
+  main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; transition: margin-right .2s ease; }
+  body.ideas-open main { margin-right: 356px; }
+
+  /* -- toggle bar + comparison strip (Upgrade 3) -------------------- */
+  .toggle-bar {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 16px;
+  }
+  .mode-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
+  .mode-toggle button {
+    border: none; background: none; padding: 6px 14px; border-radius: 999px;
+    font-size: 12.5px; cursor: pointer; color: var(--text2); font-weight: 500;
+  }
+  .mode-toggle button.active { background: var(--text); color: var(--surface); }
+  .comparison { display: flex; gap: 22px; margin-left: auto; flex-wrap: wrap; }
+  .comparison .col { text-align: center; min-width: 90px; }
+  .comparison .col-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+  .comparison .row { display: flex; gap: 16px; font-family: var(--mono); font-size: 13px; }
+  .comparison .row .without { color: var(--critical); }
+  .comparison .row .with { color: var(--good); font-weight: 600; }
+  .comparison .metric-label { font-size: 10px; color: var(--muted); }
+
+  /* -- play mode bar (Upgrade 2) ------------------------------------- */
+  .play-bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 16px;
+  }
+  .world-badge {
+    font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--blue); color: var(--blue);
+  }
+  .play-btn {
+    border: none; border-radius: 6px; padding: 7px 14px; font-size: 12.5px;
+    font-weight: 600; cursor: pointer; background: var(--good); color: white;
+  }
+  .play-btn.pause { background: var(--warning); }
+  .play-btn:disabled { opacity: .5; cursor: default; }
+  .speed-box { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); }
+  .speed-box input[type=range] { width: 110px; }
+  .play-progress { font-family: var(--mono); font-size: 12px; color: var(--text2); margin-left: auto; }
+  .progress-bar { width: 140px; height: 5px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--blue); width: 0%; transition: width .15s linear; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px;
+  }
+  .top-grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+  h2 {
+    font-size: 11px; margin: 0 0 10px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: .05em; font-weight: 600;
+  }
+  .h2-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+  .h2-row h2 { margin: 0; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .field input, .field select {
+    width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; font-family: var(--mono); background: var(--page); color: var(--text);
+  }
+  .submit-btn {
+    width: 100%; padding: 9px; border: none; border-radius: 6px; background: var(--blue);
+    color: white; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 4px;
+  }
+  .submit-btn:hover { opacity: .9; }
+
+  /* -- scenario library (replaces presets) ----------------------------- */
+  .run-all-btn {
+    border: 1px solid var(--blue); color: var(--blue); background: none; border-radius: 999px;
+    padding: 4px 10px; font-size: 10.5px; cursor: pointer; font-weight: 600; white-space: nowrap;
+  }
+  .run-all-btn:hover { background: var(--blue); color: white; }
+  .run-all-btn:disabled { opacity: .5; cursor: default; background: none; color: var(--text2); border-color: var(--border); }
+  .scenario-list { display: flex; flex-direction: column; gap: 5px; }
+  .scenario-item {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    border: 1px solid var(--border); background: var(--page); border-radius: 8px;
+    padding: 7px 9px; cursor: pointer; font-family: inherit; color: var(--text);
+  }
+  .scenario-item:hover:not(:disabled) { border-color: var(--blue); }
+  .scenario-item:disabled { opacity: .45; cursor: not-allowed; }
+  .scenario-item.active { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, var(--page)); }
+  .scenario-num {
+    flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--border);
+    color: var(--text2); font-size: 10px; font-weight: 700; display: flex;
+    align-items: center; justify-content: center; font-family: var(--mono);
+  }
+  .scenario-title { flex: 1; font-size: 12px; line-height: 1.3; }
+  .scenario-lock { font-size: 13px; color: var(--muted); flex: none; }
+  .scenario-code {
+    flex: none; font-family: var(--mono); font-size: 9.5px; color: var(--muted);
+    border: 1px solid var(--grid); border-radius: 5px; padding: 1px 5px;
+  }
+
+  /* -- story banner ------------------------------------------------------ */
+  .story-banner {
+    display: none; border: 1.5px solid var(--blue); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 12px;
+    background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+  }
+  .story-title { font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
+  .story-text { font-size: 13px; color: var(--text2); font-style: italic; margin-bottom: 6px; }
+  .story-watch { font-size: 12px; color: var(--text); }
+  .story-watch b { color: var(--blue); }
+
+  .trace-panel { min-height: 320px; }
+  .trace-empty { color: var(--muted); font-size: 13px; padding: 40px 0; text-align: center; }
+  .trace-step {
+    display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--grid);
+    opacity: 0; transform: translateY(4px); animation: reveal .25s ease forwards;
+  }
+  .trace-step:last-child { border-bottom: none; }
+  @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
+  .trace-icon {
+    flex: none; width: 20px; height: 20px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    margin-top: 1px;
+  }
+  .trace-icon.PASS { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+  .trace-icon.FAIL { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
+  .trace-icon.SKIP { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+  .trace-body .layer { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .03em; color: var(--text2); }
+  .trace-body .plain-line { font-size: 13.5px; font-weight: 600; margin: 3px 0 2px; color: var(--text); }
+  .trace-body .note { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  .trace-body .checks { list-style: none; margin: 0; padding: 0; }
+  .trace-body .checks li { font-size: 11.5px; color: var(--muted); padding: 1px 0; }
+  .trace-body .checks li.passed::before { content: "✓ "; color: var(--good); }
+  .trace-body .checks li.failed::before { content: "✗ "; color: var(--critical); }
+  .trace-outcome {
+    font-size: 11px; font-family: var(--mono); font-weight: 700; padding: 2px 8px;
+    border-radius: 999px; align-self: flex-start; margin-left: auto; flex: none;
+  }
+  .trace-outcome.PASS { color: var(--good); border: 1px solid var(--good); }
+  .trace-outcome.FAIL { color: var(--critical); border: 1px solid var(--critical); }
+  .trace-outcome.SKIP { color: var(--muted); border: 1px solid var(--muted); }
+  .trace-result {
+    margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13px;
+    border: 1.5px solid var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent);
+  }
+  .trace-result.exception { border-color: var(--critical); background: color-mix(in srgb, var(--critical) 8%, transparent); }
+  .trace-result b { font-family: var(--mono); }
+
+  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .stack-card { margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; vertical-align: top; }
+  td.num { text-align: right; font-family: var(--mono); }
+  td.mono { font-family: var(--mono); }
+  .pill { font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+  .pill.good { color: var(--good); border-color: var(--good); }
+  .pill.bad { color: var(--critical); border-color: var(--critical); }
+  .pill.pending { color: var(--warning); border-color: var(--warning); }
+  .pill.neutral { color: var(--blue); border-color: var(--blue); }
+  .empty-row td { color: var(--muted); text-align: center; padding: 16px; }
+
+  /* -- actions card (Upgrade 1) --------------------------------------- */
+  .action-note { max-width: 360px; }
+  details.draft-details summary {
+    cursor: pointer; font-size: 12px; color: var(--text2); list-style: none;
+  }
+  details.draft-details summary::-webkit-details-marker { display: none; }
+  details.draft-details summary::before { content: "▸ "; color: var(--muted); }
+  details.draft-details[open] summary::before { content: "▾ "; }
+  .draft-text {
+    white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; margin: 8px 0 0;
+    padding: 10px; background: var(--page); border-radius: 6px; border: 1px solid var(--grid);
+    max-width: 420px;
+  }
+  .send-btn {
+    border: 1px solid var(--blue); color: var(--blue); background: none; border-radius: 6px;
+    padding: 5px 12px; font-size: 11.5px; cursor: pointer; font-weight: 600; white-space: nowrap;
+  }
+  .send-btn:hover { background: var(--blue); color: white; }
+
+  /* -- raw bank statement (Upgrade 3, "without") ----------------------- */
+  #without-agent-view { display: none; }
+  .statement-note { color: var(--text2); font-size: 12.5px; margin: -2px 0 14px; }
+
+  .invoices-card { margin-top: 16px; }
+
+  #toasts { position: fixed; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .toast {
+    background: var(--text); color: var(--surface); padding: 10px 14px; border-radius: 8px;
+    font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,.2); animation: toast-in .2s ease;
+    font-family: var(--mono);
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .row-flash { animation: flash 1s ease; }
+  @keyframes flash { 0%,100% { background: transparent; } 30% { background: color-mix(in srgb, var(--blue) 20%, transparent); } }
+
+  /* -- Seven Ideas panel (Upgrade B) ----------------------------------- */
+  .ideas-tab {
+    position: fixed; top: 90px; right: 0; z-index: 8;
+    border: 1px solid var(--blue); border-right: none; background: var(--blue); color: white;
+    border-radius: 8px 0 0 8px; padding: 10px 8px; font-size: 12px; font-weight: 700;
+    cursor: pointer; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: .02em;
+  }
+  body.ideas-open .ideas-tab { display: none; }
+  .ideas-panel {
+    /* starts below the sticky header (measured 61px) so it can never cover
+       the header's own controls, e.g. Reset demo */
+    position: fixed; top: 61px; right: 0; height: calc(100vh - 61px); width: 340px; z-index: 8;
+    background: var(--surface); border-left: 1px solid var(--border);
+    box-shadow: -6px 0 20px rgba(0,0,0,.10); overflow-y: auto; padding: 16px;
+    transform: translateX(100%); transition: transform .2s ease;
+  }
+  body.ideas-open .ideas-panel { transform: translateX(0); }
+  .ideas-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .ideas-header h2 { margin: 0; }
+  .ideas-close {
+    border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer;
+    line-height: 1; padding: 2px 6px;
+  }
+  .ideas-close:hover { color: var(--critical); }
+  .ideas-sub { font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
+  .idea-card {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px;
+    background: var(--page);
+  }
+  .idea-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+  .idea-text { font-size: 12px; color: var(--text); margin-bottom: 7px; line-height: 1.4; }
+  .idea-example, .idea-why { font-size: 11.5px; color: var(--text2); margin-bottom: 5px; line-height: 1.4; }
+  .idea-example b, .idea-why b { color: var(--text); }
+  .idea-show-btn {
+    margin-top: 4px; border: 1px solid var(--blue); color: var(--blue); background: none;
+    border-radius: 6px; padding: 5px 11px; font-size: 11.5px; cursor: pointer; font-weight: 600;
+  }
+  .idea-show-btn:hover { background: var(--blue); color: white; }
+
+  @media (max-width: 900px) {
+    .top-grid { grid-template-columns: 1fr; }
+    .bottom-grid { grid-template-columns: 1fr; }
+    .comparison { margin-left: 0; }
+    body.ideas-open main { margin-right: 0; }
+    .ideas-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Finance Controller — Simulator</h1>
+  <span class="tagline">watch the six layers decide, live</span>
+  <div class="kpi-strip">
+    <div class="kpi highlight"><div class="n" id="kpi-auto">0</div><div class="l">Auto-matched</div></div>
+    <div class="kpi"><div class="n" id="kpi-human">0</div><div class="l">Human touch</div></div>
+    <div class="kpi"><div class="n" id="kpi-requeue">0</div><div class="l">Resolved on re-queue</div></div>
+    <div class="kpi"><div class="n" id="kpi-value">₹0</div><div class="l">Exception value</div></div>
+  </div>
+  <div class="dial-box">
+    <label for="dial">Confidence dial</label>
+    <input type="range" id="dial" min="0" max="100" step="5" value="85">
+    <span class="dial-value" id="dial-value">85</span>
+  </div>
+  <button class="reset-btn" id="reset-btn">Reset demo</button>
+</header>
+
+<main>
+  <div class="toggle-bar">
+    <div class="mode-toggle">
+      <button type="button" id="mode-with" class="active">With the agent</button>
+      <button type="button" id="mode-without">Without the agent</button>
+    </div>
+    <div class="comparison">
+      <div class="col">
+        <div class="col-label">Rows to read</div>
+        <div class="row"><span class="without" id="cmp-rows-without">0</span><span class="with" id="cmp-rows-with">0</span></div>
+      </div>
+      <div class="col">
+        <div class="col-label">Decisions needed</div>
+        <div class="row"><span class="without" id="cmp-dec-without">0</span><span class="with" id="cmp-dec-with">0</span></div>
+      </div>
+      <div class="col">
+        <div class="col-label">Est. time</div>
+        <div class="row"><span class="without" id="cmp-time-without">0m</span><span class="with" id="cmp-time-with">0m</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="play-bar">
+    <span class="world-badge" id="world-badge">Demo world</span>
+    <button type="button" class="play-btn" id="play-btn">▶ Play the 60-payment batch</button>
+    <button type="button" class="play-btn pause" id="pause-btn" style="display:none;">⏸ Pause</button>
+    <div class="speed-box">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="50" max="1000" step="50" value="300">
+      <span id="speed-value">300ms/payment</span>
+    </div>
+    <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+    <span class="play-progress" id="play-progress">0 / 0</span>
+  </div>
+
+  <div id="with-agent-view">
+    <div class="top-grid">
+      <div class="card">
+        <h2>Add a payment</h2>
+        <form id="payment-form">
+          <div class="field"><label>Amount (₹)</label><input type="number" id="f-amount" step="0.01" required></div>
+          <div class="field"><label>Into virtual account</label><input type="text" id="f-va" placeholder="VA-1001"></div>
+          <div class="field"><label>Payer name</label><input type="text" id="f-payer" placeholder="Acme Traders"></div>
+          <div class="field"><label>Narration</label><input type="text" id="f-narration" placeholder="NEFT/Acme Traders/INV-1001"></div>
+          <div class="field"><label>Method</label>
+            <select id="f-method">
+              <option>NEFT</option><option>RTGS</option><option>UPI</option><option>IMPS</option>
+            </select>
+          </div>
+          <button type="submit" class="submit-btn">Submit payment</button>
+        </form>
+        <div class="h2-row">
+          <h2>Scenario library</h2>
+          <button type="button" class="run-all-btn" id="run-all-btn">▶ Run all in order</button>
+        </div>
+        <div class="scenario-list" id="scenario-list"></div>
+      </div>
+
+      <div class="card trace-panel">
+        <h2>Decision trace</h2>
+        <div id="story-banner" class="story-banner">
+          <div class="story-title" id="story-title"></div>
+          <div class="story-text" id="story-text"></div>
+          <div class="story-watch"><b>Watch:</b> <span id="story-watch"></span></div>
+        </div>
+        <div id="trace-content"><div class="trace-empty">Pick a scenario, or submit a payment, to see the engine think.</div></div>
+      </div>
+    </div>
+
+    <div class="bottom-grid">
+      <div class="card">
+        <h2>Ledger</h2>
+        <table>
+          <thead><tr><th>Payment</th><th>Invoice</th><th class="num">Amount</th><th>Code</th><th>Entry type</th><th class="num">Conf.</th><th>Status</th></tr></thead>
+          <tbody id="ledger-body"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Exception queue</h2>
+        <table>
+          <thead><tr><th>Payment</th><th class="num">Amount</th><th>Code</th><th>Why</th></tr></thead>
+          <tbody id="exceptions-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card stack-card">
+      <h2>Actions</h2>
+      <table>
+        <thead><tr><th>Action</th><th>Target</th><th class="num">Amount</th><th>Note / draft</th><th>Status</th><th></th></tr></thead>
+        <tbody id="actions-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card stack-card">
+      <h2>Customers</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Virtual account</th><th>Status</th><th class="num">Open invoices</th><th class="num">Certain balance</th><th class="num">Unapplied credit</th></tr></thead>
+        <tbody id="customers-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card stack-card">
+      <h2>Live invoice ledger</h2>
+      <table>
+        <thead><tr><th>Invoice</th><th>Customer</th><th>Virtual account</th><th class="num">Amount</th><th class="num">Balance</th><th>Disputed</th></tr></thead>
+        <tbody id="invoices-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="without-agent-view">
+    <div class="card">
+      <h2>Raw bank statement</h2>
+      <p class="statement-note">What a clerk actually sees: amount, date, payer name, narration. No invoice
+        column, no reason code, no confidence -- because without the agent, none of that exists yet.</p>
+      <table>
+        <thead><tr><th>Date</th><th class="num">Amount</th><th>Payer</th><th>Narration</th></tr></thead>
+        <tbody id="raw-statement-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<button type="button" class="ideas-tab" id="ideas-tab">💡 Seven ideas</button>
+<aside class="ideas-panel" id="ideas-panel">
+  <div class="ideas-header">
+    <h2>Seven ideas</h2>
+    <button type="button" class="ideas-close" id="ideas-close">✕</button>
+  </div>
+  <p class="ideas-sub">What this app actually argues, one idea per card. "Show me" runs the scenario that proves it.</p>
+  <div id="ideas-list"></div>
+</aside>
+
+<div id="toasts"></div>
+
+<script>
+const rupees = p => "₹" + (p / 100).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const escapeHtml = s => (s || "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[c]));
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function toast(msg) {
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = msg;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function flashRow(pid) {
+  document.querySelectorAll(`tr[data-pid="${pid}"]`).forEach(tr => {
+    tr.classList.remove("row-flash");
+    void tr.offsetWidth;
+    tr.classList.add("row-flash");
+  });
+}
+
+const ACTION_LABELS = {
+  QUERY_CUSTOMER: "Query customer", SEND_STATEMENT: "Send statement",
+  APPLY_CREDIT: "Apply credit", HOLD_AND_ESCALATE: "Hold & escalate",
+};
+const STATUS_PILL = {
+  draft: "pending", sent: "good", executed: "good",
+  "partially executed": "pending", holding: "pending",
+};
+
+function renderActions(actions) {
+  const body = document.getElementById("actions-body");
+  body.innerHTML = actions.length ? actions.map(a => {
+    const noteHtml = a.draft
+      ? `<details class="draft-details"><summary>${escapeHtml(a.note || "Drafted message")}</summary>` +
+        `<pre class="draft-text">${escapeHtml(a.draft)}</pre></details>`
+      : escapeHtml(a.note || "");
+    const canSend = a.draft && a.status === "draft";
+    return `<tr data-aid="${a.action_id}">
+      <td><span class="pill neutral">${ACTION_LABELS[a.action_type] || a.action_type}</span></td>
+      <td>${escapeHtml(a.target)}</td>
+      <td class="num">${rupees(a.amount_paise)}</td>
+      <td class="action-note">${noteHtml}</td>
+      <td><span class="pill ${STATUS_PILL[a.status] || 'neutral'}">${a.status}</span></td>
+      <td>${canSend ? `<button type="button" class="send-btn" data-aid="${a.action_id}">Send</button>` : ""}</td>
+    </tr>`;
+  }).join("") : '<tr class="empty-row"><td colspan="6">No open actions.</td></tr>';
+
+  body.querySelectorAll(".send-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const resp = await api("/actions/send", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({action_id: btn.dataset.aid}),
+      });
+      renderState(resp.state);
+      toast(`${btn.dataset.aid} marked as sent`);
+    });
+  });
+}
+
+function renderComparison(cmp) {
+  document.getElementById("cmp-rows-without").textContent = cmp.without.rows_to_read;
+  document.getElementById("cmp-rows-with").textContent = cmp.with.rows_to_read;
+  document.getElementById("cmp-dec-without").textContent = cmp.without.decisions_needed;
+  document.getElementById("cmp-dec-with").textContent = cmp.with.decisions_needed;
+  document.getElementById("cmp-time-without").textContent = cmp.without.estimated_label;
+  document.getElementById("cmp-time-with").textContent = cmp.with.estimated_label;
+}
+
+function renderRawStatement(paymentLog) {
+  const body = document.getElementById("raw-statement-body");
+  body.innerHTML = paymentLog.length ? paymentLog.map(p => `
+    <tr>
+      <td class="mono">${(p.created_at || "").replace("T", " ").slice(0, 16)}</td>
+      <td class="num">${rupees(p.amount_paise)}</td>
+      <td>${escapeHtml(p.payer_name || "")}</td>
+      <td class="text-secondary">${escapeHtml(p.narration || "")}</td>
+    </tr>`).join("") : '<tr class="empty-row"><td colspan="4">No payments submitted yet.</td></tr>';
+}
+
+let lastState = null;
+
+function renderState(state) {
+  lastState = state;
+  document.getElementById("kpi-auto").textContent = state.kpis.auto_matched;
+  document.getElementById("kpi-human").textContent = state.kpis.human_touch;
+  document.getElementById("kpi-requeue").textContent = state.kpis.resolved_on_requeue_total;
+  document.getElementById("kpi-value").textContent = rupees(state.kpis.exception_value_paise);
+  document.getElementById("dial").value = state.kpis.threshold;
+  document.getElementById("dial-value").textContent = state.kpis.threshold;
+  document.getElementById("world-badge").textContent =
+    state.world === "batch" ? "Batch world (submission dataset)" : "Demo world";
+
+  const ledgerBody = document.getElementById("ledger-body");
+  const resolvedRows = state.ledger.filter(r => !r.is_exception);
+  ledgerBody.innerHTML = resolvedRows.length ? resolvedRows.map(r => `
+    <tr data-pid="${r.payment_id}">
+      <td class="mono">${r.payment_id}</td>
+      <td class="mono">${r.invoice_id || "&mdash;"}</td>
+      <td class="num">${rupees(r.amount_paise)}</td>
+      <td><span class="pill good">${r.reason_code}</span></td>
+      <td>${r.entry_type === "CASH" ? '<span class="pill good">CASH</span>' : '<span class="pill pending">ADJUSTMENT</span>'}</td>
+      <td class="num">${r.confidence}</td>
+      <td>${r.auto_posted ? '<span class="pill good">auto-posted</span>' : '<span class="pill pending">human touch</span>'}</td>
+    </tr>`).join("") : '<tr class="empty-row"><td colspan="7">No resolved allocations yet.</td></tr>';
+
+  const excBody = document.getElementById("exceptions-body");
+  excBody.innerHTML = state.exception_queue.length ? state.exception_queue.map(r => `
+    <tr data-pid="${r.payment_id}">
+      <td class="mono">${r.payment_id}</td>
+      <td class="num">${rupees(r.amount_paise)}</td>
+      <td><span class="pill bad">${r.reason_code}</span>${r.pending ? ' <span class="pill pending">retryable</span>' : ''}</td>
+      <td>${escapeHtml(r.rationale)}</td>
+    </tr>`).join("") : '<tr class="empty-row"><td colspan="4">Exception queue is empty.</td></tr>';
+
+  renderActions(state.actions);
+
+  const custBody = document.getElementById("customers-body");
+  // Column order here must track the <thead> literally: Name, Virtual
+  // account, Status, Open invoices, Certain balance, Unapplied credit.
+  custBody.innerHTML = state.customers.map(c => {
+    const colName = `<td>${escapeHtml(c.name)}</td>`;
+    const colVA = `<td class="mono">${c.virtual_account}</td>`;
+    const statusPill = c.status === "CLEAN" ? "good" : c.status === "PROVISIONAL" ? "bad" : "pending";
+    const colStatus = `<td><span class="pill ${statusPill}">${c.status}</span></td>`;
+    const colOpenCount = `<td class="num">${c.open_invoice_count}</td>`;
+    const colBalance = `<td class="num">${rupees(c.certain_balance_paise)}</td>`;
+    const colCredit = `<td class="num">${c.unapplied_credit_paise ? rupees(c.unapplied_credit_paise) : "&mdash;"}</td>`;
+    return `<tr>${colName}${colVA}${colStatus}${colOpenCount}${colBalance}${colCredit}</tr>`;
+  }).join("");
+
+  const invBody = document.getElementById("invoices-body");
+  // Column order here must track the <thead> literally: Invoice, Customer,
+  // Virtual account, Amount, Balance, Disputed -- one <td> per header, in
+  // that order. Balance is always a real value (₹0.00 for a fully paid
+  // invoice, not a blank) -- "&mdash;" is reserved for fields that are
+  // genuinely absent, not for zero.
+  invBody.innerHTML = state.invoices.map(i => {
+    const colInvoice = `<td class="mono">${i.invoice_id}</td>`;
+    const colCustomer = `<td>${escapeHtml(i.customer_name)}</td>`;
+    const colVA = `<td class="mono">${i.virtual_account}</td>`;
+    const colAmount = `<td class="num">${rupees(i.amount_paise)}</td>`;
+    const colBalance = `<td class="num">${rupees(i.balance_paise)}</td>`;
+    const colDisputed = `<td>${i.disputed ? '<span class="pill bad">disputed</span>' : ""}</td>`;
+    return `<tr>${colInvoice}${colCustomer}${colVA}${colAmount}${colBalance}${colDisputed}</tr>`;
+  }).join("");
+
+  renderComparison(state.comparison);
+  renderRawStatement(state.payment_log);
+}
+
+/* -- Section C: plain-English line per trace layer, plus a synthetic
+   L6_ACTION step. L6 isn't part of the engine's trace (the action layer
+   runs separately, in simulator/state.py) -- it's built here from the
+   /payment response's own state.actions, not invented client-side. */
+const LAYER_PLAIN = {
+  L0_IDENTITY: "Who sent this money?",
+  L1_COMPOSITE: "Did they write the bill number, and does the amount agree?",
+  L2_TOLERANCE: "Is the shortage small enough to ignore?",
+  L3_AI: "Can AI make sense of messy text?",
+  L4_POLICY: "Does a house rule settle it?",
+  L5_EXCEPTION: "We could not prove it. Here is why.",
+  L6_ACTION: "Here is what we will do about it.",
+};
+
+function buildActionStep(resp) {
+  const actions = (resp.state && resp.state.actions) || [];
+  const action = actions.find(a => a.payment_id === resp.payment_id);
+  if (!action) {
+    return {
+      layer: "L6_ACTION", checks: [], outcome: "SKIP",
+      note: "Fully resolved -- no further action needed.",
+    };
+  }
+  const label = ACTION_LABELS[action.action_type] || action.action_type;
+  const executed = action.status === "executed" || action.status === "sent";
+  return {
+    layer: "L6_ACTION", checks: [], outcome: executed ? "PASS" : "FAIL",
+    note: `${label}: ${action.note || ""}`,
+  };
+}
+
+function renderTrace(trace, finalResult) {
+  const content = document.getElementById("trace-content");
+  content.innerHTML = "";
+  trace.forEach((step, i) => {
+    const el = document.createElement("div");
+    el.className = "trace-step";
+    el.style.animationDelay = (i * 180) + "ms";
+    const checksHtml = step.checks.map(c =>
+      `<li class="${c.passed ? "passed" : "failed"}">${c.name}${c.detail ? " &mdash; " + c.detail : ""}</li>`
+    ).join("");
+    const plain = LAYER_PLAIN[step.layer] || "";
+    el.innerHTML = `
+      <div class="trace-icon ${step.outcome}">${step.outcome === "PASS" ? "&check;" : step.outcome === "FAIL" ? "&times;" : "&ndash;"}</div>
+      <div class="trace-body" style="flex:1;">
+        <div class="layer">${step.layer}</div>
+        ${plain ? `<div class="plain-line">${escapeHtml(plain)}</div>` : ""}
+        <div class="note">${step.note}</div>
+        <ul class="checks">${checksHtml}</ul>
+      </div>
+      <div class="trace-outcome ${step.outcome}">${step.outcome}</div>`;
+    content.appendChild(el);
+  });
+  if (finalResult) {
+    const el = document.createElement("div");
+    el.className = "trace-result" + (finalResult.isException ? " exception" : "");
+    el.style.animationDelay = (trace.length * 180) + "ms";
+    el.innerHTML = finalResult.html;
+    content.appendChild(el);
+  }
+}
+
+function describeOutcome(resp) {
+  if (resp.resolved) {
+    const rows = resp.allocation;
+    const primary = rows.find(r => r.invoice_id) || rows[0];
+    const html = `<b>${primary.reason_code}</b> &middot; ${primary.invoice_id ? "invoice " + primary.invoice_id : "no invoice"} &middot; confidence ${primary.confidence}<br>${primary.rationale}`;
+    return {isException: primary.reason_code === "SUSPENSE", html};
+  }
+  return {isException: true, html: `<b>${resp.pending_reason}</b> &middot; parked for review<br>${resp.trace[resp.trace.length-1]?.note || ""}`};
+}
+
+async function handlePaymentResponse(resp) {
+  const traceWithAction = [...resp.trace, buildActionStep(resp)];
+  renderTrace(traceWithAction, describeOutcome(resp));
+  renderState(resp.state);
+  if (resp.resolved) flashRow(resp.payment_id);
+  resp.resolved_on_requeue.forEach(pid => {
+    toast(`${pid} resolved on re-queue`);
+    flashRow(pid);
+  });
+  return resp;
+}
+
+async function submitFields(fields) {
+  const resp = await api("/payment", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(fields),
+  });
+  return await handlePaymentResponse(resp);
+}
+
+document.getElementById("payment-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const fields = {
+    amount_paise: Math.round(parseFloat(document.getElementById("f-amount").value) * 100),
+    virtual_account: document.getElementById("f-va").value || null,
+    payer_name: document.getElementById("f-payer").value || null,
+    narration: document.getElementById("f-narration").value || "",
+    method: document.getElementById("f-method").value,
+  };
+  hideStoryBanner();
+  await submitFields(fields);
+});
+
+document.getElementById("reset-btn").addEventListener("click", async () => {
+  stopPlay();
+  const snapshot = await api("/reset", {method: "POST"});
+  ranScenarioIds = new Set();
+  renderScenarioList();
+  hideStoryBanner();
+  renderState(snapshot);
+  document.getElementById("trace-content").innerHTML = '<div class="trace-empty">Pick a scenario, or submit a payment, to see the engine think.</div>';
+});
+
+let dialTimer = null;
+document.getElementById("dial").addEventListener("input", e => {
+  document.getElementById("dial-value").textContent = e.target.value;
+  clearTimeout(dialTimer);
+  dialTimer = setTimeout(async () => {
+    const resp = await api("/dial", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({threshold: parseInt(e.target.value, 10)}),
+    });
+    renderState(resp.state);
+    resp.moved_payment_ids.forEach(flashRow);
+  }, 180);
+});
+
+/* -- Section A: scenario library -------------------------------------- */
+let scenarios = [];
+let ranScenarioIds = new Set();
+
+function showStoryBanner(scenario) {
+  document.getElementById("story-title").textContent = scenario.title;
+  document.getElementById("story-text").textContent = scenario.story;
+  document.getElementById("story-watch").textContent = scenario.watch;
+  document.getElementById("story-banner").style.display = "block";
+}
+
+function hideStoryBanner() {
+  document.getElementById("story-banner").style.display = "none";
+}
+
+function renderScenarioList() {
+  const box = document.getElementById("scenario-list");
+  box.innerHTML = scenarios.map((sc, i) => {
+    const locked = sc.requires && !ranScenarioIds.has(sc.requires);
+    return `<button type="button" class="scenario-item" data-id="${sc.id}" ${locked ? "disabled" : ""}>
+      <span class="scenario-num">${i + 1}</span>
+      <span class="scenario-title">${escapeHtml(sc.title)}${locked ? " <span class='scenario-lock'>🔒</span>" : ""}</span>
+      <span class="scenario-code">${sc.expected_reason_code}</span>
+    </button>`;
+  }).join("");
+  box.querySelectorAll(".scenario-item").forEach(btn => {
+    btn.addEventListener("click", () => runScenarioById(btn.dataset.id));
+  });
+}
+
+async function runScenarioById(id) {
+  const sc = scenarios.find(s => s.id === id);
+  if (!sc) return null;
+  showStoryBanner(sc);
+  let lastResp = null;
+  for (const payment of sc.payments) {
+    lastResp = await submitFields(payment);
+  }
+  ranScenarioIds.add(sc.id);
+  renderScenarioList();
+  return lastResp;
+}
+
+async function loadScenarios() {
+  scenarios = await api("/scenarios");
+  renderScenarioList();
+}
+
+document.getElementById("run-all-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("run-all-btn");
+  btn.disabled = true;
+  stopPlay();
+  const snapshot = await api("/reset", {method: "POST"});
+  ranScenarioIds = new Set();
+  renderState(snapshot);
+  renderScenarioList();
+  document.getElementById("trace-content").innerHTML = '<div class="trace-empty">Running all scenarios in order…</div>';
+  for (let i = 0; i < scenarios.length; i++) {
+    await runScenarioById(scenarios[i].id);
+    if (i < scenarios.length - 1) await new Promise(r => setTimeout(r, 4000));
+  }
+  btn.disabled = false;
+});
+
+/* -- Section B: Seven Ideas panel --------------------------------------- */
+const SEVEN_IDEAS = [
+  {
+    title: "1. Confidence is counted, never asked",
+    text: "An AI says it is 92% sure whether it is right or wrong. So we never ask it. We add up things we can count instead.",
+    example: "Bill number correct +50, amount exact +30, only one possible bill +20 = 100. A repaired typo scores 30 instead of 50, so the same match lands lower.",
+    why: "Every point is defensible, and the dial means something.",
+    scenario: "typo_in_reference",
+  },
+  {
+    title: "2. Identity and allocation are different problems",
+    text: "Razorpay's virtual accounts already tell you WHO paid. Nothing tells you WHICH BILL it settles.",
+    example: "₹6,000 into Kumar's account. We know it is Kumar with certainty. We still cannot say which of his three bills it pays.",
+    why: "This app starts where Razorpay's product stops.",
+    scenario: "cant_tell_which_bill",
+  },
+  {
+    title: "3. A refusal is not permanent",
+    text: "Every time new money arrives, we retry everything we gave up on.",
+    example: "₹6,000 from Kumar is unsolvable on Monday. On Wednesday more money arrives, only one bill is left, and Monday's payment resolves itself.",
+    why: "Most exception queues only grow. This one drains.",
+    scenario: "it_solves_itself",
+  },
+  {
+    title: "4. Two kinds of certainty, reported separately",
+    text: "Which bills closed can be unknowable while the balance stays exact.",
+    example: "Paid ₹34,000 of ₹63,000 in odd amounts. Which bills closed: unknown. What is owed: ₹29,000, provably.",
+    why: "We report what we can prove apart from what we assumed.",
+    scenario: "balance_certain_split_unknown",
+  },
+  {
+    title: "5. A write-off is not cash",
+    text: "Money written off never arrived. It cannot be counted as received.",
+    example: "₹1,960 arrived on a ₹2,000 bill. The ledger shows ₹1,960 CASH and ₹40 ADJUSTMENT. Every run asserts that cash recorded equals cash received.",
+    why: "This is an accounting bug engineers do not see.",
+    scenario: "bank_took_a_fee",
+  },
+  {
+    title: "6. It does not stop at flagging",
+    text: "Every unsolved payment exits with an action, not just a label.",
+    example: "Cannot tell which bill -> drafts the email asking the customer. Paid twice -> applies the credit to the next bill automatically, no human.",
+    why: "The brief says close the loop. A flag does not close it.",
+    scenario: "paid_twice_by_mistake",
+  },
+  {
+    title: "7. The AI's job is deliberately small",
+    text: "The AI reads messy text and picks from a shortlist we hand it. It never decides an outcome, never touches money we can verify, and may say “I don't know”.",
+    example: "It repairs INV-10O2 to INV-1002, choosing only from bills that are actually open. It cannot invent a bill.",
+    why: "Keeping it narrow is what makes the result checkable.",
+    scenario: "typo_in_reference",
+  },
+];
+
+function renderIdeas() {
+  const box = document.getElementById("ideas-list");
+  box.innerHTML = SEVEN_IDEAS.map(idea => `
+    <div class="idea-card">
+      <div class="idea-title">${escapeHtml(idea.title)}</div>
+      <div class="idea-text">${escapeHtml(idea.text)}</div>
+      <div class="idea-example"><b>Example:</b> ${escapeHtml(idea.example)}</div>
+      <div class="idea-why"><b>Why:</b> ${escapeHtml(idea.why)}</div>
+      <button type="button" class="idea-show-btn" data-scenario="${idea.scenario}">Show me</button>
+    </div>`).join("");
+  box.querySelectorAll(".idea-show-btn").forEach(btn => {
+    btn.addEventListener("click", () => showMeScenario(btn.dataset.scenario));
+  });
+}
+
+async function showMeScenario(id) {
+  const sc = scenarios.find(s => s.id === id);
+  if (!sc) return;
+  if (sc.requires && !ranScenarioIds.has(sc.requires)) {
+    await runScenarioById(sc.requires);
+    await new Promise(r => setTimeout(r, 600));
+  }
+  await runScenarioById(id);
+  document.querySelector(".trace-panel").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+document.getElementById("ideas-tab").addEventListener("click", () => {
+  document.body.classList.add("ideas-open");
+});
+document.getElementById("ideas-close").addEventListener("click", () => {
+  document.body.classList.remove("ideas-open");
+});
+
+/* -- Upgrade 3: with/without toggle ---------------------------------- */
+document.getElementById("mode-with").addEventListener("click", () => setViewMode("with"));
+document.getElementById("mode-without").addEventListener("click", () => setViewMode("without"));
+
+function setViewMode(mode) {
+  document.getElementById("with-agent-view").style.display = mode === "with" ? "block" : "none";
+  document.getElementById("without-agent-view").style.display = mode === "without" ? "block" : "none";
+  document.getElementById("mode-with").classList.toggle("active", mode === "with");
+  document.getElementById("mode-without").classList.toggle("active", mode === "without");
+}
+
+/* -- Upgrade 2: Play mode --------------------------------------------- */
+const play = {running: false, paused: false, index: 0, payments: [], speedMs: 300};
+
+document.getElementById("speed").addEventListener("input", e => {
+  play.speedMs = parseInt(e.target.value, 10);
+  document.getElementById("speed-value").textContent = `${play.speedMs}ms/payment`;
+});
+
+function updatePlayProgress() {
+  const total = play.payments.length;
+  document.getElementById("play-progress").textContent = `${play.index} / ${total}`;
+  document.getElementById("progress-fill").style.width = total ? `${(play.index / total) * 100}%` : "0%";
+}
+
+async function playLoop() {
+  if (!play.running || play.paused) return;
+  if (play.index >= play.payments.length) {
+    stopPlay();
+    toast("Batch playback complete");
+    return;
+  }
+  const p = play.payments[play.index];
+  const resp = await api("/payment", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      amount_paise: p.amount_paise, virtual_account: p.virtual_account,
+      payer_name: p.payer_name, narration: p.narration, method: p.method,
+      payment_id: p.payment_id, created_at: p.created_at,
+    }),
+  });
+  await handlePaymentResponse(resp);
+  play.index += 1;
+  updatePlayProgress();
+  if (play.running && !play.paused) setTimeout(playLoop, play.speedMs);
+}
+
+function stopPlay() {
+  play.running = false;
+  play.paused = false;
+  document.getElementById("play-btn").style.display = "";
+  document.getElementById("play-btn").disabled = false;
+  document.getElementById("play-btn").textContent = "▶ Play the 60-payment batch";
+  document.getElementById("pause-btn").style.display = "none";
+}
+
+document.getElementById("play-btn").addEventListener("click", async () => {
+  if (play.running) return;
+  hideStoryBanner();
+  const btn = document.getElementById("play-btn");
+  btn.disabled = true;
+  btn.textContent = "Loading batch…";
+  const data = await api("/reset_batch", {method: "POST"});
+  play.running = true;
+  play.paused = false;
+  play.index = 0;
+  play.payments = data.payments;
+  play.speedMs = parseInt(document.getElementById("speed").value, 10);
+  renderState(data.state);
+  document.getElementById("trace-content").innerHTML = '<div class="trace-empty">Playing the batch…</div>';
+  updatePlayProgress();
+  btn.style.display = "none";
+  btn.disabled = false;
+  document.getElementById("pause-btn").style.display = "";
+  playLoop();
+});
+
+document.getElementById("pause-btn").addEventListener("click", () => {
+  play.paused = !play.paused;
+  const btn = document.getElementById("pause-btn");
+  btn.textContent = play.paused ? "▶ Resume" : "⏸ Pause";
+  if (!play.paused) playLoop();
+});
+
+(async function init() {
+  document.body.classList.add("ideas-open");
+  renderIdeas();
+  await loadScenarios();
+  const snapshot = await api("/state");
+  renderState(snapshot);
+})();
+</script>
+</body>
+</html>
