@@ -1,0 +1,332 @@
+<title>AI Finance Controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --page: #f9f9f7;
+    --text: #0b0b0b; --text2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+    --blue: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface: #1a1a19; --page: #0d0d0d;
+      --text: #ffffff; --text2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --good: #0ca30c; --warning: #fab219; --critical: #e66767;
+      --blue: #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #1a1a19; --page: #0d0d0d;
+    --text: #ffffff; --text2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --good: #0ca30c; --warning: #fab219; --critical: #e66767;
+    --blue: #3987e5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 32px 20px 64px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .tagline { color: var(--text2); margin: 0 0 28px; font-size: 14px; }
+  h1 { position: relative; padding-left: 14px; }
+  h1::before {
+    content: ""; position: absolute; left: 0; top: 3px; bottom: 3px;
+    width: 4px; border-radius: 2px; background: var(--blue);
+  }
+  h2 {
+    font-size: 13px; margin: 40px 0 12px; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; overflow-x: auto;
+  }
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
+  }
+  .stat-tile {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .stat-tile.headline { border-color: var(--blue); border-width: 1.5px; }
+  .stat-label { font-size: 12px; color: var(--text2); }
+  .stat-value {
+    font-size: 26px; font-weight: 600; margin: 4px 0;
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .stat-tile.headline .stat-value { color: var(--blue); }
+  .stat-sub { font-size: 11px; color: var(--muted); }
+  .legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: var(--text2); }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .chart-svg { width: 100%; height: auto; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .ref-line { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
+  .axis-label { font-size: 10px; fill: var(--muted); }
+  .point-label { font-size: 11px; font-weight: 600; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table th {
+    text-align: left; font-weight: 500; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 8px 10px; border-bottom: 1px solid var(--grid);
+  }
+  table.data-table td {
+    padding: 8px 10px; border-bottom: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums;
+  }
+  table.data-table td.num { text-align: right; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  th.num { text-align: right; }
+  .text-secondary { color: var(--text2); }
+  .exception-group { margin-bottom: 20px; }
+  .exception-group-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px;
+  }
+  .code-pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 7px;
+    border-radius: 999px; font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
+    border: 1px solid var(--border); color: var(--text2);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  .code-pill::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--pill-color); flex: none;
+  }
+  .code-suspense, .code-ambign, .code-nomatch { --pill-color: var(--critical); }
+  .code-tolfee, .code-partexp, .code-residded { --pill-color: var(--warning); }
+  .code-exact, .code-bulkn, .code-reffuzzy, .code-fifotie, .code-duponacc { --pill-color: var(--good); }
+  footer { margin-top: 48px; color: var(--muted); font-size: 12px; }
+  .tier-note { color: var(--text2); font-size: 13px; margin: -4px 0 16px; max-width: 66ch; }
+  .prov-customer {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    padding: 16px 0; border-bottom: 1px solid var(--grid);
+  }
+  .prov-customer:last-child { border-bottom: none; padding-bottom: 0; }
+  .prov-customer-id { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .prov-customer-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .tier { padding: 10px 12px; border-radius: 8px; }
+  .tier-ledger { background: color-mix(in srgb, var(--warning) 10%, transparent); }
+  .tier-certain { background: color-mix(in srgb, var(--good) 10%, transparent); }
+  .tier-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--text2); margin-bottom: 4px;
+  }
+  .tier-value {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 18px; font-weight: 600;
+  }
+  .tier-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .split-list { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .split-list span { font-family: "IBM Plex Mono", ui-monospace, monospace; color: var(--text2); }
+  @media (max-width: 640px) { .prov-customer { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+</style>
+<div class="wrap">
+  <h1>AI Finance Controller</h1>
+  <p class="tagline">Payment-to-invoice allocation, 64 payments
+    against 61 open invoices &middot; measured, not asserted</p>
+
+  <div class="kpi-row"><div class="stat-tile"><div class="stat-label">Match rate vs ground truth</div><div class="stat-value">100.0%</div><div class="stat-sub">64 synthetic payments, 11 reason codes</div></div><div class="stat-tile headline"><div class="stat-label">Auto-resolution rate</div><div class="stat-value">75.0%</div><div class="stat-sub">industry benchmark: 85-95% straight-through</div></div><div class="stat-tile"><div class="stat-label">Human touches</div><div class="stat-value">11</div><div class="stat-sub">16 raw exceptions, grouped</div></div><div class="stat-tile"><div class="stat-label">Value requiring review</div><div class="stat-value">Rs 374,475.00</div><div class="stat-sub">rupee view, not row count</div></div><div class="stat-tile"><div class="stat-label">Precision @ default dial</div><div class="stat-value">100.0%</div><div class="stat-sub">of what posted automatically at 85</div></div><div class="stat-tile"><div class="stat-label">Resolved on re-queue</div><div class="stat-value">2</div><div class="stat-sub">genuinely unresolvable on arrival, closed by a later payment</div></div></div>
+
+  <h2>Held-out validation &mdash; what happens on data we didn't design for</h2>
+  <p class="tier-note">The submission dataset above is built to the same 12-code
+    spec the engine is written against &mdash; a match rate against it alone
+    proves the code runs, not that it generalizes. This holdout batch is
+    messy cases the spec never enumerated: a phantom invoice reference, a 2x
+    overpayment, near-identical payer names, a refund, a payment predating
+    its own invoice, a narration naming two conflicting invoices. Two of six
+    categories are documented misses, explained below.</p>
+  <div class="kpi-row" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 16px;">
+    <div class="stat-tile"><div class="stat-label">Submission match rate</div>
+      <div class="stat-value">100.0%</div>
+      <div class="stat-sub">spec-matched dataset</div></div>
+    <div class="stat-tile headline"><div class="stat-label">Holdout match rate</div>
+      <div class="stat-value">66.7%</div>
+      <div class="stat-sub">messy cases the spec never enumerated</div></div>
+  </div>
+  <div class="card"><table class="data-table"><thead><tr><th>Payment</th><th>What happened</th></tr></thead><tbody><tr><td class="mono">PAY-0005</td><td class="text-secondary">expected <b>NO-MATCH</b>, got <b>EXACT</b><br>DOCUMENTED MISS: payment predates its invoice's issue_date; the engine has no temporal check and will resolve this EXACT anyway -- future work</td></tr><tr><td class="mono">PAY-0006</td><td class="text-secondary">expected <b>AMBIG-N</b>, got <b>EXACT</b><br>DOCUMENTED MISS: narration names two invoice IDs, amount fits only one -- the engine falls through to amount-only matching and confidently returns EXACT, silently ignoring the conflicting second reference</td></tr></tbody></table></div>
+
+  <h2>Two-tier report &mdash; certain balance vs. assumed split</h2>
+  <p class="tier-note">A customer whose payments never individually matched
+    an invoice isn't a blank. Every payment below is, correctly, its own
+    NO-MATCH exception &mdash; and the customer's outstanding balance is
+    still provably exact, because it's arithmetic (invoiced minus received),
+    not allocation. What's <em>not</em> provable is which specific invoice
+    each rupee will eventually close, so that split is FIFO-assumed and
+    never posted to the ledger.</p>
+  <div class="kpi-row" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 16px;">
+    <div class="stat-tile"><div class="stat-label">Customer status accuracy</div>
+      <div class="stat-value">100.0%</div>
+      <div class="stat-sub">CLEAN / PARTIAL / PROVISIONAL vs ground truth</div></div>
+    <div class="stat-tile headline"><div class="stat-label">Balance accuracy</div>
+      <div class="stat-value">100.0%</div>
+      <div class="stat-sub">certain even for PROVISIONAL customers</div></div>
+  </div>
+  <div class="card"><div class="prov-customer">
+      <div>
+        <div class="prov-customer-id mono">CUST-015 &middot; Falcon Pvt Ltd</div>
+        <div class="prov-customer-sub">3
+          payments never matched an
+          invoice, totalling Rs 17,750.00</div>
+        <div class="tier tier-ledger">
+          <div class="tier-label">Naive ledger view</div>
+          <div class="tier-value">Rs 149,047.00 open</div>
+          <div class="tier-sub">of Rs 149,047.00 invoiced, looking only at
+            posted allocations</div>
+        </div>
+      </div>
+      <div>
+        <div class="prov-customer-id">&nbsp;</div>
+        <div class="prov-customer-sub">&nbsp;</div>
+        <div class="tier tier-certain">
+          <div class="tier-label">Certain balance</div>
+          <div class="tier-value">Rs 131,297.00 owed</div>
+          <div class="tier-sub">ledger balance minus cash we know arrived, unapplied</div>
+        </div>
+        <div class="split-list">Assumed split (FIFO, not posted): <span>INV-0051: Rs 17,750.00</span>&nbsp;&nbsp;</div>
+      </div>
+    </div><div class="prov-customer">
+      <div>
+        <div class="prov-customer-id mono">CUST-014 &middot; Deccan Textiles</div>
+        <div class="prov-customer-sub">4
+          payments never matched an
+          invoice, totalling Rs 26,864.00</div>
+        <div class="tier tier-ledger">
+          <div class="tier-label">Naive ledger view</div>
+          <div class="tier-value">Rs 130,670.00 open</div>
+          <div class="tier-sub">of Rs 130,670.00 invoiced, looking only at
+            posted allocations</div>
+        </div>
+      </div>
+      <div>
+        <div class="prov-customer-id">&nbsp;</div>
+        <div class="prov-customer-sub">&nbsp;</div>
+        <div class="tier tier-certain">
+          <div class="tier-label">Certain balance</div>
+          <div class="tier-value">Rs 103,806.00 owed</div>
+          <div class="tier-sub">ledger balance minus cash we know arrived, unapplied</div>
+        </div>
+        <div class="split-list">Assumed split (FIFO, not posted): <span>INV-0045: Rs 9,180.00</span>&nbsp;&nbsp;<span>INV-0046: Rs 17,684.00</span>&nbsp;&nbsp;</div>
+      </div>
+    </div><div class="prov-customer">
+      <div>
+        <div class="prov-customer-id mono">CUST-012 &middot; Udaan Foods</div>
+        <div class="prov-customer-sub">1
+          payment never matched an
+          invoice, totalling Rs 52,914.00</div>
+        <div class="tier tier-ledger">
+          <div class="tier-label">Naive ledger view</div>
+          <div class="tier-value">Rs 105,828.00 open</div>
+          <div class="tier-sub">of Rs 105,828.00 invoiced, looking only at
+            posted allocations</div>
+        </div>
+      </div>
+      <div>
+        <div class="prov-customer-id">&nbsp;</div>
+        <div class="prov-customer-sub">&nbsp;</div>
+        <div class="tier tier-certain">
+          <div class="tier-label">Certain balance</div>
+          <div class="tier-value">Rs 52,914.00 owed</div>
+          <div class="tier-sub">ledger balance minus cash we know arrived, unapplied</div>
+        </div>
+        <div class="split-list">Assumed split (FIFO, not posted): <span>INV-0041: Rs 52,914.00</span>&nbsp;&nbsp;</div>
+      </div>
+    </div><div class="prov-customer">
+      <div>
+        <div class="prov-customer-id mono">CUST-013 &middot; Indus Traders</div>
+        <div class="prov-customer-sub">1
+          payment never matched an
+          invoice, totalling Rs 37,146.00</div>
+        <div class="tier tier-ledger">
+          <div class="tier-label">Naive ledger view</div>
+          <div class="tier-value">Rs 74,292.00 open</div>
+          <div class="tier-sub">of Rs 74,292.00 invoiced, looking only at
+            posted allocations</div>
+        </div>
+      </div>
+      <div>
+        <div class="prov-customer-id">&nbsp;</div>
+        <div class="prov-customer-sub">&nbsp;</div>
+        <div class="tier tier-certain">
+          <div class="tier-label">Certain balance</div>
+          <div class="tier-value">Rs 37,146.00 owed</div>
+          <div class="tier-sub">ledger balance minus cash we know arrived, unapplied</div>
+        </div>
+        <div class="split-list">Assumed split (FIFO, not posted): <span>INV-0043: Rs 37,146.00</span>&nbsp;&nbsp;</div>
+      </div>
+    </div></div>
+
+  <h2>Confidence threshold trade-off</h2>
+  <div class="card">
+    <div class="legend"><span class="legend-item"><span class="swatch" style="background:var(--good)"></span>Auto-matched</span><span class="legend-item"><span class="swatch" style="background:var(--warning)"></span>Human touches</span><span class="legend-item"><span class="swatch" style="background:var(--critical)"></span>Wrong matches</span></div>
+    <svg class="chart-svg" viewBox="0 0 760 320" role="img" aria-label="Confidence threshold trade-off curve">
+<line x1="54" y1="286.0" x2="744" y2="286.0" class="gridline"/>
+<text x="46" y="290.0" class="axis-label" text-anchor="end">0</text>
+<line x1="54" y1="235.6" x2="744" y2="235.6" class="gridline"/>
+<text x="46" y="239.6" class="axis-label" text-anchor="end">10</text>
+<line x1="54" y1="185.2" x2="744" y2="185.2" class="gridline"/>
+<text x="46" y="189.2" class="axis-label" text-anchor="end">20</text>
+<line x1="54" y1="134.8" x2="744" y2="134.8" class="gridline"/>
+<text x="46" y="138.8" class="axis-label" text-anchor="end">30</text>
+<line x1="54" y1="84.4" x2="744" y2="84.4" class="gridline"/>
+<text x="46" y="88.4" class="axis-label" text-anchor="end">40</text>
+<line x1="54" y1="34.0" x2="744" y2="34.0" class="gridline"/>
+<text x="46" y="38.0" class="axis-label" text-anchor="end">50</text>
+<text x="54.0" y="306" class="axis-label" text-anchor="middle">0</text>
+<text x="192.0" y="306" class="axis-label" text-anchor="middle">20</text>
+<text x="330.0" y="306" class="axis-label" text-anchor="middle">40</text>
+<text x="468.0" y="306" class="axis-label" text-anchor="middle">60</text>
+<text x="606.0" y="306" class="axis-label" text-anchor="middle">80</text>
+<text x="744.0" y="306" class="axis-label" text-anchor="middle">100</text>
+<line x1="54" y1="286" x2="744" y2="286" class="axis-line"/>
+<line x1="640.5" y1="34" x2="640.5" y2="286" class="ref-line"/>
+<text x="640.5" y="22" class="axis-label" text-anchor="middle">default dial (85)</text>
+<path d="M54.0,44.1 L88.5,44.1 L123.0,44.1 L157.5,44.1 L192.0,44.1 L226.5,44.1 L261.0,44.1 L295.5,44.1 L330.0,44.1 L364.5,54.2 L399.0,54.2 L433.5,54.2 L468.0,54.2 L502.5,69.3 L537.0,69.3 L571.5,69.3 L606.0,69.3 L640.5,129.8 L675.0,129.8 L709.5,165.0 L744.0,195.3" fill="none" stroke="var(--good)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="640.5" cy="129.8" r="4.5" fill="var(--good)" stroke="var(--surface)" stroke-width="2"/>
+<title>Auto-matched: 31 at threshold 85</title>
+<text x="648.5" y="119.8" class="point-label" fill="var(--text)">31</text>
+<path d="M54.0,230.6 L88.5,230.6 L123.0,230.6 L157.5,230.6 L192.0,230.6 L226.5,230.6 L261.0,230.6 L295.5,230.6 L330.0,230.6 L364.5,220.5 L399.0,220.5 L433.5,220.5 L468.0,220.5 L502.5,205.4 L537.0,205.4 L571.5,205.4 L606.0,205.4 L640.5,144.9 L675.0,144.9 L709.5,109.6 L744.0,79.4" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="640.5" cy="144.9" r="4.5" fill="var(--warning)" stroke="var(--surface)" stroke-width="2"/>
+<title>Human touches: 28 at threshold 85</title>
+<text x="648.5" y="160.9" class="point-label" fill="var(--text)">28</text>
+<path d="M54.0,286.0 L88.5,286.0 L123.0,286.0 L157.5,286.0 L192.0,286.0 L226.5,286.0 L261.0,286.0 L295.5,286.0 L330.0,286.0 L364.5,286.0 L399.0,286.0 L433.5,286.0 L468.0,286.0 L502.5,286.0 L537.0,286.0 L571.5,286.0 L606.0,286.0 L640.5,286.0 L675.0,286.0 L709.5,286.0 L744.0,286.0" fill="none" stroke="var(--critical)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="640.5" cy="286.0" r="4.5" fill="var(--critical)" stroke="var(--surface)" stroke-width="2"/>
+<title>Wrong matches: 0 at threshold 85</title>
+<text x="648.5" y="276.0" class="point-label" fill="var(--text)">0</text>
+</svg>
+  </div>
+
+  <h2>Reason code accuracy vs ground truth</h2>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Code</th><th>Meaning</th><th class="num">Expected</th>
+      <th class="num">Correct</th><th class="num">Accuracy</th></tr></thead>
+      <tbody><tr><td class="mono">EXACT</td><td class="text-secondary">Exact match</td><td class="num">10</td><td class="num">10</td><td class="num">100.0%</td></tr><tr><td class="mono">DUP-ONACC</td><td class="text-secondary">Duplicate / on-account</td><td class="num">8</td><td class="num">8</td><td class="num">100.0%</td></tr><tr><td class="mono">NO-MATCH</td><td class="text-secondary">No match</td><td class="num">7</td><td class="num">7</td><td class="num">100.0%</td></tr><tr><td class="mono">SUSPENSE</td><td class="text-secondary">Suspense (payer unknown)</td><td class="num">7</td><td class="num">7</td><td class="num">100.0%</td></tr><tr><td class="mono">PART-EXP</td><td class="text-secondary">Partial, more expected</td><td class="num">6</td><td class="num">6</td><td class="num">100.0%</td></tr><tr><td class="mono">REF-FUZZY</td><td class="text-secondary">Reference repaired</td><td class="num">6</td><td class="num">6</td><td class="num">100.0%</td></tr><tr><td class="mono">RESID-DED</td><td class="text-secondary">Residual deduction</td><td class="num">6</td><td class="num">6</td><td class="num">100.0%</td></tr><tr><td class="mono">TOL-FEE</td><td class="text-secondary">Tolerance write-off</td><td class="num">6</td><td class="num">6</td><td class="num">100.0%</td></tr><tr><td class="mono">BULK-N</td><td class="text-secondary">Bulk settlement</td><td class="num">4</td><td class="num">4</td><td class="num">100.0%</td></tr><tr><td class="mono">AMBIG-N</td><td class="text-secondary">Ambiguous candidates</td><td class="num">2</td><td class="num">2</td><td class="num">100.0%</td></tr><tr><td class="mono">FIFO-TIE</td><td class="text-secondary">FIFO tie-break</td><td class="num">2</td><td class="num">2</td><td class="num">100.0%</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>Exception queue &mdash; ranked by value</h2>
+  <div class="card"><div class="exception-group"><div class="exception-group-head"><span class="code-pill code-suspense">SUSPENSE</span><span class="text-secondary">Suspense (payer unknown) &middot; 7 payments &middot; Rs 239,801.00</span></div><table class="data-table"><thead><tr><th>Payment</th><th>Payer</th><th class="num">Amount</th><th>Why it's parked</th></tr></thead><tbody><tr><td class="mono">PAY-0047</td><td class="text-secondary">Tandem Exports</td><td class="num">Rs 65,068.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0051</td><td class="text-secondary">Jaipur Exports</td><td class="num">Rs 40,697.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0046</td><td class="text-secondary">Meridian Logistics</td><td class="num">Rs 39,814.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0048</td><td class="text-secondary">Everest Pvt Ltd</td><td class="num">Rs 39,760.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0049</td><td class="text-secondary">Orbit Solutions</td><td class="num">Rs 25,676.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0050</td><td class="text-secondary">Everest Foods</td><td class="num">Rs 18,577.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0045</td><td class="text-secondary">Tandem Textiles</td><td class="num">Rs 10,209.00</td><td class="text-secondary">virtual account does not map to any known customer</td></tr></tbody></table></div><div class="exception-group"><div class="exception-group-head"><span class="code-pill code-ambign">AMBIG-N</span><span class="text-secondary">Ambiguous candidates &middot; 2 payments &middot; Rs 90,060.00</span></div><table class="data-table"><thead><tr><th>Payment</th><th>Payer</th><th class="num">Amount</th><th>Why it's parked</th></tr></thead><tbody><tr><td class="mono">PAY-0052</td><td class="text-secondary">Udaan Foods</td><td class="num">Rs 52,914.00</td><td class="text-secondary">2 candidates, a disputed invoice is tied: stub: a disputed candidate is tied with others, refusing to guess</td></tr><tr><td class="mono">PAY-0053</td><td class="text-secondary">Indus Traders</td><td class="num">Rs 37,146.00</td><td class="text-secondary">2 candidates, a disputed invoice is tied: stub: a disputed candidate is tied with others, refusing to guess</td></tr></tbody></table></div><div class="exception-group"><div class="exception-group-head"><span class="code-pill code-nomatch">NO-MATCH</span><span class="text-secondary">No match &middot; 7 payments &middot; Rs 44,614.00</span></div><table class="data-table"><thead><tr><th>Payment</th><th>Payer</th><th class="num">Amount</th><th>Why it's parked</th></tr></thead><tbody><tr><td class="mono">PAY-0054</td><td class="text-secondary">Deccan Textiles</td><td class="num">Rs 10,041.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr><tr><td class="mono">PAY-0057</td><td class="text-secondary">Deccan Textiles</td><td class="num">Rs 8,050.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr><tr><td class="mono">PAY-0058</td><td class="text-secondary">Falcon Pvt Ltd</td><td class="num">Rs 7,371.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr><tr><td class="mono">PAY-0059</td><td class="text-secondary">Falcon Pvt Ltd</td><td class="num">Rs 5,608.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr><tr><td class="mono">PAY-0055</td><td class="text-secondary">Deccan Textiles</td><td class="num">Rs 5,088.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr><tr><td class="mono">PAY-0060</td><td class="text-secondary">Falcon Pvt Ltd</td><td class="num">Rs 4,771.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr><tr><td class="mono">PAY-0056</td><td class="text-secondary">Deccan Textiles</td><td class="num">Rs 3,685.00</td><td class="text-secondary">no reference, amount, or combination of open invoices matches this payment</td></tr></tbody></table></div></div>
+
+  <h2>Sample allocations</h2>
+  <div class="card">
+    <table class="data-table">
+      <thead><tr><th>Payment</th><th>Invoice</th><th class="num">Amount</th>
+      <th>Reason</th><th class="num">Confidence</th><th>Rationale</th></tr></thead>
+      <tbody><tr><td class="mono">PAY-0008</td><td class="mono">INV-0008</td><td class="num">Rs 223,657.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0007</td><td class="mono">INV-0007</td><td class="num">Rs 66,024.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0006</td><td class="mono">INV-0006</td><td class="num">Rs 178,346.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0005</td><td class="mono">INV-0005</td><td class="num">Rs 169,794.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0004</td><td class="mono">INV-0004</td><td class="num">Rs 37,722.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0003</td><td class="mono">INV-0003</td><td class="num">Rs 104,595.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0002</td><td class="mono">INV-0002</td><td class="num">Rs 77,842.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0001</td><td class="mono">INV-0001</td><td class="num">Rs 122,757.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr><tr><td class="mono">PAY-0051</td><td class="mono">-</td><td class="num">Rs 40,697.00</td><td><span class="code-pill code-suspense">SUSPENSE</span></td><td class="num">0</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0026</td><td class="mono">INV-0026</td><td class="num">Rs 77,536.46</td><td><span class="code-pill code-residded">RESID-DED</span></td><td class="num">80</td><td class="text-secondary">shortfall 519354p treated as deduction</td></tr><tr><td class="mono">PAY-0026</td><td class="mono">INV-0026</td><td class="num">Rs 5,193.54</td><td><span class="code-pill code-residded">RESID-DED</span></td><td class="num">80</td><td class="text-secondary">deduction recorded as residual, invoice cleared</td></tr><tr><td class="mono">PAY-0050</td><td class="mono">-</td><td class="num">Rs 18,577.00</td><td><span class="code-pill code-suspense">SUSPENSE</span></td><td class="num">0</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0025</td><td class="mono">INV-0025</td><td class="num">Rs 94,343.67</td><td><span class="code-pill code-residded">RESID-DED</span></td><td class="num">80</td><td class="text-secondary">shortfall 513933p treated as deduction</td></tr><tr><td class="mono">PAY-0025</td><td class="mono">INV-0025</td><td class="num">Rs 5,139.33</td><td><span class="code-pill code-residded">RESID-DED</span></td><td class="num">80</td><td class="text-secondary">deduction recorded as residual, invoice cleared</td></tr><tr><td class="mono">PAY-0014</td><td class="mono">INV-0014</td><td class="num">Rs 156,452.06</td><td><span class="code-pill code-tolfee">TOL-FEE</span></td><td class="num">95</td><td class="text-secondary">shortfall 70694p within tolerance</td></tr><tr><td class="mono">PAY-0014</td><td class="mono">INV-0014</td><td class="num">Rs 706.94</td><td><span class="code-pill code-tolfee">TOL-FEE</span></td><td class="num">95</td><td class="text-secondary">tolerance write-off to bank charges</td></tr><tr><td class="mono">PAY-0024</td><td class="mono">INV-0024</td><td class="num">Rs 158,456.90</td><td><span class="code-pill code-residded">RESID-DED</span></td><td class="num">80</td><td class="text-secondary">shortfall 1118810p treated as deduction</td></tr><tr><td class="mono">PAY-0024</td><td class="mono">INV-0024</td><td class="num">Rs 11,188.10</td><td><span class="code-pill code-residded">RESID-DED</span></td><td class="num">80</td><td class="text-secondary">deduction recorded as residual, invoice cleared</td></tr><tr><td class="mono">PAY-0049</td><td class="mono">-</td><td class="num">Rs 25,676.00</td><td><span class="code-pill code-suspense">SUSPENSE</span></td><td class="num">0</td><td class="text-secondary">virtual account does not map to any known customer</td></tr><tr><td class="mono">PAY-0062</td><td class="mono">INV-0058</td><td class="num">Rs 58,292.00</td><td><span class="code-pill code-exact">EXACT</span></td><td class="num">100</td><td class="text-secondary">reference and amount agree</td></tr></tbody>
+    </table>
+  </div>
+
+  <footer>Generated from out/results.json by report/generate_report.py &middot;
+    AI Finance Controller &middot; Razorpay Buildathon Track 04</footer>
+</div>
