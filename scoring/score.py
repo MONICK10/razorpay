@@ -17,7 +17,7 @@ from engine.confidence import DEFAULT_AUTO_POST_THRESHOLD
 from engine.customer_status import compute_from_db
 from engine.db import connect
 from engine.reason_codes import EXCEPTIONS
-from engine.l5_exceptions import build_queue, human_touch_groups
+from engine.l5_exceptions import build_queue, bucket_payments, human_touch_groups
 
 OUT_DIR = Path(__file__).parent.parent / "out"
 
@@ -209,6 +209,14 @@ def score(gt: dict, actual: dict) -> dict:
 
     default_row = next(r for r in curve if r["threshold"] == DEFAULT_AUTO_POST_THRESHOLD)
 
+    bucket_entries = [
+        {"payment_id": pid, "resolved": a["reason_code"] not in EXCEPTION_CODES,
+         "confidence": a["confidence"], "reason_code": a["reason_code"],
+         "virtual_account": a["virtual_account"]}
+        for pid, a in actual.items()
+    ]
+    buckets_at_default_threshold = bucket_payments(bucket_entries, DEFAULT_AUTO_POST_THRESHOLD)
+
     exception_rows = [
         {
             "payment_id": pid,
@@ -236,6 +244,7 @@ def score(gt: dict, actual: dict) -> dict:
         "precision_at_default_threshold": default_row["precision"],
         "resolved_on_requeue_count": resolved_on_requeue_count,
         "threshold_curve": curve,
+        "buckets_at_default_threshold": buckets_at_default_threshold,
         "exception_queue": build_queue(exception_rows),
     }
 
@@ -273,6 +282,12 @@ def main() -> None:
     print(f"precision @ default threshold ({DEFAULT_AUTO_POST_THRESHOLD}): "
           f"{result['precision_at_default_threshold']}")
     print(f"resolved_on_requeue_count: {result['resolved_on_requeue_count']}")
+    b = result["buckets_at_default_threshold"]
+    print(f"buckets @ default threshold ({DEFAULT_AUTO_POST_THRESHOLD}): "
+          f"payments={b['total']} auto_posted={b['auto_posted']} "
+          f"needs_confirmation={b['needs_confirmation']} "
+          f"exceptions={b['exceptions']} (exceptions_grouped={b['exceptions_grouped']})  "
+          f"[{b['auto_posted']}+{b['needs_confirmation']}+{b['exceptions']}={b['total']}]")
     cs = result["customer_status"]
     print(f"customer status_accuracy: {cs['status_accuracy']*100:.1f}%  "
           f"balance_accuracy: {cs['balance_accuracy']*100:.1f}%")
