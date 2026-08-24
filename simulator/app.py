@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from simulator import seed
 from simulator.state import SessionState
 
 STATIC_DIR = Path(__file__).parent / "static"
+OUT_DIR = Path(__file__).parent.parent / "out"
 
 
 @asynccontextmanager
@@ -132,6 +134,43 @@ def upload(payload: UploadIn) -> dict:
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.get("/report_summary")
+def report_summary() -> dict:
+    """Read-only numbers for the landing page's tiles, sourced straight
+    from out/results.json / out/results_holdout.json -- whatever
+    scoring/score.py (and, for holdout, scoring/compare's inputs) last
+    wrote, never hardcoded. Returns available=False if scoring hasn't
+    been run yet in this checkout."""
+    results_path = OUT_DIR / "results.json"
+    if not results_path.exists():
+        return {"available": False}
+    with open(results_path) as f:
+        results = json.load(f)
+    summary = {
+        "available": True,
+        "payments": results["totals"]["payments"],
+        "auto_posted": results["buckets_at_default_threshold"]["auto_posted"],
+        "human_touches": results["human_touches"],
+        "wrong_matches": len(results["mismatches"]),
+        "match_rate": results["overall_match_rate"],
+    }
+    holdout_path = OUT_DIR / "results_holdout.json"
+    if holdout_path.exists():
+        with open(holdout_path) as f:
+            holdout = json.load(f)
+        summary["holdout"] = {
+            "match_rate": holdout["overall_match_rate"],
+            "precision_at_default_threshold": holdout["precision_at_default_threshold"],
+            "balance_accuracy": holdout["customer_status"]["balance_accuracy"],
+        }
+    return summary
+
+
 @app.get("/")
+def landing() -> FileResponse:
+    return FileResponse(STATIC_DIR / "landing.html")
+
+
+@app.get("/app")
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")

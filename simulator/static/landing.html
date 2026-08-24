@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Finance Controller</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --surface: #fcfcfb; --page: #f2f2ef; --text: #0b0b0b; --text2: #52514e;
+    --muted: #898781; --grid: #e1e0d9; --border: #d8d7cf;
+    --good: #0ca30c; --warning: #c98600; --critical: #d03b3b; --blue: #2a78d6;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 24px 80px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px 32px; margin-bottom: 20px;
+  }
+
+  /* -- title block -------------------------------------------------- */
+  .hero { text-align: center; padding: 12px 0 36px; }
+  .hero h1 { font-size: 32px; margin: 0 0 10px; letter-spacing: -.01em; }
+  .hero .subtitle { font-size: 16.5px; color: var(--text2); margin: 0 0 14px; max-width: 520px;
+    margin-left: auto; margin-right: auto; }
+  .hero .track {
+    display: inline-block; font-size: 11.5px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .05em; border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+  }
+
+  h2 {
+    font-size: 12px; margin: 0 0 16px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: .06em; font-weight: 700;
+  }
+  .card p { margin: 0 0 12px; color: var(--text); font-size: 15px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  /* -- layer diagram -------------------------------------------------- */
+  .layers { display: flex; flex-direction: column; }
+  .layer-row {
+    display: flex; align-items: flex-start; gap: 14px; padding: 10px 0;
+    border-left: 2px solid var(--grid); padding-left: 18px; margin-left: 9px;
+    position: relative;
+  }
+  .layer-row::before {
+    content: ""; position: absolute; left: -6px; top: 16px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--blue); border: 2px solid var(--surface);
+  }
+  .layer-row:last-child { border-left: 2px solid transparent; }
+  .layer-code {
+    flex: none; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--blue);
+    border: 1px solid var(--blue); border-radius: 6px; padding: 2px 7px; margin-top: 1px;
+    white-space: nowrap;
+  }
+  .layer-q { font-size: 14.5px; color: var(--text); padding-top: 1px; }
+  .layers-tagline {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--grid);
+    font-size: 13.5px; color: var(--text2); text-align: center; font-style: italic;
+  }
+
+  /* -- numbers tiles -------------------------------------------------- */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+  .tile { background: var(--page); border: 1px solid var(--grid); border-radius: 10px;
+    padding: 14px 12px; text-align: center; }
+  .tile .n { font-family: var(--mono); font-weight: 700; font-size: 22px; color: var(--text); }
+  .tile .n.good { color: var(--good); }
+  .tile .l { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em;
+    margin-top: 4px; }
+  .holdout-line { font-size: 12.5px; color: var(--text2); text-align: center; }
+  .numbers-unavailable { font-size: 13px; color: var(--muted); text-align: center; padding: 8px 0; }
+  @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+
+  /* -- CTA -------------------------------------------------------- */
+  .cta-wrap { text-align: center; padding: 20px 0 0; }
+  .cta-btn {
+    display: inline-block; background: var(--blue); color: white; text-decoration: none;
+    font-size: 16px; font-weight: 700; padding: 15px 38px; border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(42,120,214,.28); transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .cta-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(42,120,214,.36); }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <h1>AI Finance Controller</h1>
+    <p class="subtitle">Payment-to-invoice reconciliation that knows when it doesn't know.</p>
+    <span class="track">Razorpay Buildathon &middot; Track 04</span>
+  </div>
+
+  <div class="card">
+    <h2>The problem</h2>
+    <p>A merchant sends out hundreds of bills a month. Money comes back into their bank
+      account. But the bank doesn't say which bill each payment settles &mdash; it just says
+      money arrived.</p>
+    <p>So every morning someone in finance sits with two lists and connects them by hand.
+      This is called reconciliation.</p>
+    <p>Razorpay's virtual accounts already solved half of it: each customer pays into their
+      own account number, so you always know WHO paid. Nobody solved WHICH BILL it settles.</p>
+  </div>
+
+  <div class="card">
+    <h2>The solution</h2>
+    <div class="layers">
+      <div class="layer-row"><span class="layer-code">L0</span><span class="layer-q">Who sent this money?</span></div>
+      <div class="layer-row"><span class="layer-code">L1</span><span class="layer-q">Did they write the bill number, and does the amount agree?</span></div>
+      <div class="layer-row"><span class="layer-code">L2</span><span class="layer-q">Is the shortage small enough to ignore?</span></div>
+      <div class="layer-row"><span class="layer-code">L3</span><span class="layer-q">Can AI make sense of messy text?</span></div>
+      <div class="layer-row"><span class="layer-code">L4</span><span class="layer-q">Does a house rule settle it?</span></div>
+      <div class="layer-row"><span class="layer-code">L5</span><span class="layer-q">We could not prove it. Here is why.</span></div>
+      <div class="layer-row"><span class="layer-code">L6</span><span class="layer-q">Here is what we will do about it.</span></div>
+    </div>
+    <div class="layers-tagline">Rules where proof exists. AI where interpretation is needed. Refusal where neither works.</div>
+  </div>
+
+  <div class="card">
+    <h2>The numbers</h2>
+    <div id="tiles-area">
+      <div class="numbers-unavailable">Loading&hellip;</div>
+    </div>
+  </div>
+
+  <div class="cta-wrap">
+    <a class="cta-btn" href="/app">Open the simulator</a>
+  </div>
+</main>
+
+<script>
+const rupees = p => "₹" + (p / 100).toLocaleString("en-IN", {minimumFractionDigits: 0, maximumFractionDigits: 0});
+
+function renderTiles(s) {
+  const area = document.getElementById("tiles-area");
+  if (!s.available) {
+    area.innerHTML = '<div class="numbers-unavailable">Run <code>python -m scoring.score</code> to populate these live.</div>';
+    return;
+  }
+  area.innerHTML = `
+    <div class="tiles">
+      <div class="tile"><div class="n">${s.payments}</div><div class="l">Payments</div></div>
+      <div class="tile"><div class="n good">${s.auto_posted}</div><div class="l">Posted with no human</div></div>
+      <div class="tile"><div class="n">${s.human_touches}</div><div class="l">Real decisions</div></div>
+      <div class="tile"><div class="n ${s.wrong_matches === 0 ? 'good' : ''}">${s.wrong_matches}</div><div class="l">Wrong matches</div></div>
+    </div>
+    ${s.holdout ? `<div class="holdout-line">On a holdout set written to break it: ${(s.holdout.match_rate*100).toFixed(1)}% match rate, ${(s.holdout.precision_at_default_threshold*100).toFixed(0)}% precision, ${(s.holdout.balance_accuracy*100).toFixed(0)}% balance accuracy.</div>` : ''}
+  `;
+}
+
+fetch("/report_summary").then(r => r.json()).then(renderTiles).catch(() => {
+  document.getElementById("tiles-area").innerHTML =
+    '<div class="numbers-unavailable">Could not load live numbers.</div>';
+});
+</script>
+</body>
+</html>
