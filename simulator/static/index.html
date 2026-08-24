@@ -322,7 +322,7 @@
 
   <div class="play-bar">
     <span class="world-badge" id="world-badge">Demo world</span>
-    <button type="button" class="play-btn" id="play-btn">▶ Play the 60-payment batch</button>
+    <button type="button" class="play-btn" id="play-btn">▶ Play the submission batch</button>
     <button type="button" class="play-btn pause" id="pause-btn" style="display:none;">⏸ Pause</button>
     <div class="speed-box">
       <label for="speed">Speed</label>
@@ -884,6 +884,10 @@ function setViewMode(mode) {
 
 /* -- Upgrade 2: Play mode --------------------------------------------- */
 const play = {running: false, paused: false, index: 0, payments: [], speedMs: 300};
+let lastBatchSize = null;
+function playBtnLabel() {
+  return lastBatchSize ? `▶ Play the ${lastBatchSize}-payment batch` : "▶ Play the submission batch";
+}
 
 document.getElementById("speed").addEventListener("input", e => {
   play.speedMs = parseInt(e.target.value, 10);
@@ -923,7 +927,7 @@ function stopPlay() {
   play.paused = false;
   document.getElementById("play-btn").style.display = "";
   document.getElementById("play-btn").disabled = false;
-  document.getElementById("play-btn").textContent = "▶ Play the 60-payment batch";
+  document.getElementById("play-btn").textContent = playBtnLabel();
   document.getElementById("pause-btn").style.display = "none";
 }
 
@@ -934,6 +938,7 @@ document.getElementById("play-btn").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Loading batch…";
   const data = await api("/reset_batch", {method: "POST"});
+  lastBatchSize = data.payments.length;
   play.running = true;
   play.paused = false;
   play.index = 0;

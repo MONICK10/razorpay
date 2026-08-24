@@ -13,7 +13,7 @@ from pathlib import Path
 
 from engine import customer_status, l4_policy, l6_action
 from engine.confidence import DEFAULT_AUTO_POST_THRESHOLD
-from engine.l5_exceptions import human_touch_groups
+from engine.l5_exceptions import bucket_payments
 from engine.pipeline import MAX_REQUEUE_PASSES, Context, resolve_payment
 from engine.reason_codes import EXCEPTIONS, ActionType, EntryType, ReasonCode
 from simulator import seed
@@ -187,7 +187,20 @@ class SessionState:
         row is tagged ADJUSTMENT, not CASH -- the cash was already counted
         once, on the original on-account row; re-attributing it to an
         invoice moves no new money, so counting it again would double the
-        CASH total against SUM(payments)."""
+        CASH total against SUM(payments).
+
+        Demo world only. engine/pipeline.py's batch run() has no
+        equivalent step -- a DUP-ONACC payment there just parks as credit
+        and never touches an invoice balance. Auto-applying it in batch
+        world too silently closes/shrinks invoices the real submission
+        dataset's later payments (built against engine/pipeline.py's
+        behavior) still expect to be open, producing wrong matches for
+        payments completely unrelated to the duplicate itself -- observed
+        for 7 of the 64 submission payments before this guard was added.
+        Skipping it here is what makes batch-world numbers reproduce
+        scoring/score.py's results.json exactly."""
+        if self.world_name == "batch":
+            return
         cust = self.ctx.customers_by_va.get(payment.get("virtual_account"))
         if cust is None:
             return
@@ -251,6 +264,8 @@ class SessionState:
                 elif applied > 0:
                     status = "partially executed"
                     note = f"Applied {applied/100:,.2f}; {remainder/100:,.2f} held, no open invoice left."
+                elif self.world_name == "batch":
+                    status, note = "holding", "Credit held on account (batch world does not auto-apply)."
                 else:
                     status, note = "holding", "No open invoice yet -- credit held on account."
                 actions.append({
@@ -366,49 +381,66 @@ class SessionState:
         exception_queue.sort(key=lambda r: -r["amount_paise"])
 
         actions = self._build_actions(ledger_rows, customers, pending_unmatched_by_customer)
-
-        resolved_rows = [r for r in ledger_rows if not r["is_exception"]]
-        auto_matched = sum(1 for r in resolved_rows if r["auto_posted"])
-        below_threshold = len(resolved_rows) - auto_matched
         exception_value = sum(r["amount_paise"] for r in exception_queue)
 
-        # "Without the agent" comparison: every submitted payment is an
-        # opaque bank-statement row needing its own decision. "With the
-        # agent": APPLY_CREDIT never needs a human (it executes on its
-        # own) so it's excluded entirely; the rest is "rows to read" (raw,
-        # ungrouped -- every exception row, below-threshold resolved row,
-        # and open statement draft that's literally on screen) vs.
-        # "decisions needed" (human_touch_groups -- the same grouping
-        # scoring/score.py uses for the batch report's human-touches KPI:
-        # several exceptions for the same customer collapse into one
-        # sitting, SUSPENSE never collapses; below-threshold resolved rows
-        # and statement drafts aren't grouped further). rows_to_read is
-        # always >= decisions_needed -- the gap is exactly what grouping
-        # saved the clerk from re-reading.
+        # Payment-level bucketing (shared with scoring/score.py's batch
+        # report via engine.l5_exceptions.bucket_payments): one entry per
+        # unique payment_id, NOT per ledger row. A single payment can
+        # produce several ledger rows -- BULK-N splits across every
+        # invoice it covers, TOL-FEE/RESID-DED split into a CASH row and
+        # an ADJUSTMENT row -- and counting rows instead of payments let
+        # auto_matched + human_touch exceed the actual payment count
+        # (e.g. 43 + 51 = 94 against 60 payments). Confidence and
+        # reason_code are uniform across one payment's rows by
+        # construction (engine/pipeline.py), so grouping by payment_id and
+        # taking any row's values is safe.
         payment_va = {p["payment_id"]: p.get("virtual_account") for p in self.payment_log}
-        exception_touch_rows = [
-            {"payment_id": r["payment_id"], "reason_code": r["reason_code"],
-             "virtual_account": payment_va.get(r["payment_id"])}
-            for r in exception_queue
+        rows_by_payment: dict[str, list[dict]] = {}
+        for r in ledger_rows:
+            rows_by_payment.setdefault(r["payment_id"], []).append(r)
+        # SUSPENSE is terminal -- unlike AMBIG-N/NO-MATCH it's never
+        # retried, so it's written straight to self.ledger rather than
+        # left in self.pending (see engine/pipeline.py). Its rows still
+        # carry is_exception=True, so a payment's ledger rows are only
+        # "resolved" for bucketing purposes when none of them are.
+        bucket_entries = [
+            {"payment_id": pid, "resolved": not rows[0]["is_exception"],
+             "confidence": min(r["confidence"] for r in rows),
+             "reason_code": rows[0]["reason_code"],
+             "virtual_account": payment_va.get(pid)}
+            for pid, rows in rows_by_payment.items()
         ]
-        grouped_touches = human_touch_groups(exception_touch_rows)
+        bucket_entries.extend(
+            {"payment_id": pid, "resolved": False, "confidence": None,
+             "reason_code": _code_value(res.pending_reason),
+             "virtual_account": payment.get("virtual_account")}
+            for pid, (payment, res) in self.pending.items()
+        )
+        buckets = bucket_payments(bucket_entries, self.threshold)
+
         open_statement_actions = [
             a for a in actions
             if a["action_type"] == ActionType.SEND_STATEMENT.value and a["status"] == "draft"]
 
         # Single definition of "a human decision is needed here," shared by
         # the header's Human touch KPI and the strip's Decisions needed --
-        # they used to be computed two different ways (one ungrouped and
-        # blind to statement drafts, the other blind to below-threshold
-        # resolved rows) and could disagree. This mirrors
-        # scoring/score.py's threshold curve, which counts a below-dial
-        # resolved match as a touch alongside grouped exceptions; the
-        # simulator additionally folds in open statement drafts, which the
-        # batch report has no equivalent of.
-        human_touch = len(grouped_touches) + below_threshold + len(open_statement_actions)
+        # both are now buckets["exceptions_grouped"] (several exceptions
+        # for the same customer collapse into one sitting, same grouping
+        # scoring/score.py uses) + buckets["needs_confirmation"]
+        # (below-dial resolved payments, not grouped further) + open
+        # statement drafts, which the batch report has no equivalent of.
+        human_touch = (buckets["exceptions_grouped"] + buckets["needs_confirmation"]
+                        + len(open_statement_actions))
 
+        # "Without the agent": every payment is an opaque bank-statement
+        # row needing its own decision, so rows_to_read == decisions_needed
+        # == the total payment count -- no grouping, nothing pre-resolved.
         without_rows = len(self.payment_log)
-        with_rows_to_read = len(exception_touch_rows) + below_threshold + len(open_statement_actions)
+        assert without_rows == buckets["total"], (
+            f"payment_log ({without_rows}) and bucket total ({buckets['total']}) "
+            "disagree on how many payments exist")
+        with_rows_to_read = (buckets["exceptions"] + buckets["needs_confirmation"]
+                              + len(open_statement_actions))
         comparison = {
             "without": {
                 "rows_to_read": without_rows, "decisions_needed": without_rows,
@@ -431,9 +463,10 @@ class SessionState:
             "actions": actions,
             "payment_log": self.payment_log,
             "comparison": comparison,
+            "buckets": buckets,
             "kpis": {
                 "threshold": self.threshold,
-                "auto_matched": auto_matched,
+                "auto_matched": buckets["auto_posted"],
                 "human_touch": human_touch,
                 "exception_value_paise": exception_value,
                 "resolved_on_requeue_total": self.resolved_on_requeue_total,

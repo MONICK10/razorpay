@@ -74,8 +74,8 @@ def reset() -> dict:
 
 @app.post("/reset_batch")
 def reset_batch() -> dict:
-    """Swap the live world for the real 60-payment submission dataset
-    (engine/generate_data.py) -- what Play mode streams through."""
+    """Swap the live world for the real submission dataset
+    (engine/generate_data.py, 64 payments) -- what Play mode streams through."""
     return state.reset_batch()
 
 
