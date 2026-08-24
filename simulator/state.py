@@ -369,19 +369,22 @@ class SessionState:
 
         resolved_rows = [r for r in ledger_rows if not r["is_exception"]]
         auto_matched = sum(1 for r in resolved_rows if r["auto_posted"])
-        human_touch = (len(resolved_rows) - auto_matched) + len(exception_queue)
+        below_threshold = len(resolved_rows) - auto_matched
         exception_value = sum(r["amount_paise"] for r in exception_queue)
 
         # "Without the agent" comparison: every submitted payment is an
         # opaque bank-statement row needing its own decision. "With the
         # agent": APPLY_CREDIT never needs a human (it executes on its
         # own) so it's excluded entirely; the rest is "rows to read" (raw,
-        # ungrouped -- what's literally on screen) vs. "decisions needed"
-        # (human_touch_groups -- the same grouping scoring/score.py uses
-        # for the batch report's human-touches KPI: several exceptions
-        # for the same customer collapse into one sitting, SUSPENSE never
-        # collapses). SEND_STATEMENT drafts are already one-per-customer,
-        # so grouping doesn't change their count.
+        # ungrouped -- every exception row, below-threshold resolved row,
+        # and open statement draft that's literally on screen) vs.
+        # "decisions needed" (human_touch_groups -- the same grouping
+        # scoring/score.py uses for the batch report's human-touches KPI:
+        # several exceptions for the same customer collapse into one
+        # sitting, SUSPENSE never collapses; below-threshold resolved rows
+        # and statement drafts aren't grouped further). rows_to_read is
+        # always >= decisions_needed -- the gap is exactly what grouping
+        # saved the clerk from re-reading.
         payment_va = {p["payment_id"]: p.get("virtual_account") for p in self.payment_log}
         exception_touch_rows = [
             {"payment_id": r["payment_id"], "reason_code": r["reason_code"],
@@ -393,9 +396,19 @@ class SessionState:
             a for a in actions
             if a["action_type"] == ActionType.SEND_STATEMENT.value and a["status"] == "draft"]
 
+        # Single definition of "a human decision is needed here," shared by
+        # the header's Human touch KPI and the strip's Decisions needed --
+        # they used to be computed two different ways (one ungrouped and
+        # blind to statement drafts, the other blind to below-threshold
+        # resolved rows) and could disagree. This mirrors
+        # scoring/score.py's threshold curve, which counts a below-dial
+        # resolved match as a touch alongside grouped exceptions; the
+        # simulator additionally folds in open statement drafts, which the
+        # batch report has no equivalent of.
+        human_touch = len(grouped_touches) + below_threshold + len(open_statement_actions)
+
         without_rows = len(self.payment_log)
-        with_rows_to_read = len(exception_touch_rows) + len(open_statement_actions)
-        with_decisions = len(grouped_touches) + len(open_statement_actions)
+        with_rows_to_read = len(exception_touch_rows) + below_threshold + len(open_statement_actions)
         comparison = {
             "without": {
                 "rows_to_read": without_rows, "decisions_needed": without_rows,
@@ -403,9 +416,9 @@ class SessionState:
                 "estimated_label": _fmt_minutes(without_rows * MINUTES_PER_MANUAL_ROW),
             },
             "with": {
-                "rows_to_read": with_rows_to_read, "decisions_needed": with_decisions,
-                "estimated_minutes": with_decisions * MINUTES_PER_ACTION_REVIEW,
-                "estimated_label": _fmt_minutes(with_decisions * MINUTES_PER_ACTION_REVIEW),
+                "rows_to_read": with_rows_to_read, "decisions_needed": human_touch,
+                "estimated_minutes": human_touch * MINUTES_PER_ACTION_REVIEW,
+                "estimated_label": _fmt_minutes(human_touch * MINUTES_PER_ACTION_REVIEW),
             },
         }
 
