@@ -182,6 +182,7 @@
   }
   .trace-result.exception { border-color: var(--critical); background: color-mix(in srgb, var(--critical) 8%, transparent); }
   .trace-result b { font-family: var(--mono); }
+  .trace-result-plain { font-size: 15.5px; font-weight: 600; line-height: 1.4; color: var(--text); margin-bottom: 8px; }
 
   .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
   .stack-card { margin-top: 16px; }
@@ -196,6 +197,19 @@
   .pill.pending { color: var(--warning); border-color: var(--warning); }
   .pill.neutral { color: var(--blue); border-color: var(--blue); }
   .empty-row td { color: var(--muted); text-align: center; padding: 16px; }
+
+  /* -- plain-English hover/click tooltips ------------------------------ */
+  .tip { position: relative; cursor: help; }
+  span.tip, .l.tip { border-bottom: 1px dotted var(--muted); }
+  .tip::after {
+    content: attr(data-tip); position: absolute; top: 130%; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--surface); padding: 7px 10px; border-radius: 7px;
+    font-size: 11.5px; font-weight: 400; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.4; text-align: left; white-space: normal; width: max-content; max-width: 230px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.22); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .12s ease; z-index: 200;
+  }
+  .tip:hover::after, .tip.tip-open::after { opacity: 1; visibility: visible; }
 
   /* -- actions card (Upgrade 1) --------------------------------------- */
   .action-note { max-width: 360px; }
@@ -285,13 +299,13 @@
   <h1>AI Finance Controller — Simulator</h1>
   <span class="tagline">watch the six layers decide, live</span>
   <div class="kpi-strip">
-    <div class="kpi highlight"><div class="n" id="kpi-auto">0</div><div class="l">Auto-matched</div></div>
-    <div class="kpi"><div class="n" id="kpi-human">0</div><div class="l">Human touch</div></div>
-    <div class="kpi"><div class="n" id="kpi-requeue">0</div><div class="l">Resolved on re-queue</div></div>
-    <div class="kpi"><div class="n" id="kpi-value">₹0</div><div class="l">Exception value</div></div>
+    <div class="kpi highlight"><div class="n" id="kpi-auto">0</div><div class="l tip" data-tip="Handled with no human involved.">Auto-matched</div></div>
+    <div class="kpi"><div class="n" id="kpi-human">0</div><div class="l tip" data-tip="Needs a person to look.">Human touch</div></div>
+    <div class="kpi"><div class="n" id="kpi-requeue">0</div><div class="l tip" data-tip="Payments we gave up on earlier, that later money made solvable.">Resolved on re-queue</div></div>
+    <div class="kpi"><div class="n" id="kpi-value">₹0</div><div class="l tip" data-tip="Total money currently sitting unresolved.">Exception value</div></div>
   </div>
   <div class="dial-box">
-    <label for="dial">Confidence dial</label>
+    <label for="dial" class="tip" data-tip="How sure the app must be before applying a match on its own.">Confidence dial</label>
     <input type="range" id="dial" min="0" max="100" step="5" value="85">
     <span class="dial-value" id="dial-value">85</span>
   </div>
@@ -403,7 +417,7 @@
     <div class="card stack-card">
       <h2>Live invoice ledger</h2>
       <table>
-        <thead><tr><th>Invoice</th><th>Customer</th><th>Virtual account</th><th class="num">Amount</th><th class="num">Balance</th><th>Disputed</th></tr></thead>
+        <thead><tr><th>Invoice</th><th>Customer</th><th>Virtual account</th><th class="num tip" data-tip="What the bill was originally for.">Amount</th><th class="num tip" data-tip="How much is still unpaid.">Balance</th><th>Disputed</th></tr></thead>
         <tbody id="invoices-body"></tbody>
       </table>
     </div>
@@ -461,6 +475,44 @@ function flashRow(pid) {
     tr.classList.add("row-flash");
   });
 }
+
+/* -- plain-English hover/click tooltips ------------------------------ */
+const REASON_TIP = {
+  EXACT: "Bill number and amount both agreed.",
+  "REF-FUZZY": "The bill number was typed wrong. AI worked out which one they meant.",
+  "PART-EXP": "They paid part of it. The rest is expected later.",
+  "RESID-DED": "They paid less on purpose. The bill is closed and the gap recorded as a deduction.",
+  "TOL-FEE": "A tiny amount was missing, small enough to write off. The bill closed anyway.",
+  "BULK-N": "One payment covering several bills at once.",
+  "FIFO-TIE": "Two bills were identical in every way, so we applied the oldest-first rule.",
+  "DUP-ONACC": "They paid the same bill twice. The extra is held as credit for their next bill.",
+  "AMBIG-N": "We know who paid. We cannot tell which bill it settles.",
+  "NO-MATCH": "We know who paid. Nothing they owe fits this amount.",
+  SUSPENSE: "We do not even know who sent this money.",
+};
+const ENTRY_TYPE_TIP = {
+  CASH: "Real money that arrived in the bank.",
+  ADJUSTMENT: "A write-off. This money never arrived.",
+};
+const LEDGER_STATUS_TIP = {
+  auto: "Confident enough to apply on its own. No human needed.",
+  human: "Matched, but scored below the dial. A person should confirm it.",
+};
+const CUSTOMER_STATUS_TIP = {
+  CLEAN: "Nothing outstanding.",
+  PARTIAL: "Some bills still open.",
+  PROVISIONAL: "We know exactly what they owe. We are less sure which bills are still open.",
+};
+
+// click toggles a tooltip open (so it works if the mouse isn't over it
+// during a screen recording); hover already works via pure CSS.
+document.addEventListener("click", e => {
+  const tip = e.target.closest(".tip");
+  document.querySelectorAll(".tip.tip-open").forEach(el => {
+    if (el !== tip) el.classList.remove("tip-open");
+  });
+  if (tip) tip.classList.toggle("tip-open");
+});
 
 const ACTION_LABELS = {
   QUERY_CUSTOMER: "Query customer", SEND_STATEMENT: "Send statement",
@@ -541,10 +593,10 @@ function renderState(state) {
       <td class="mono">${r.payment_id}</td>
       <td class="mono">${r.invoice_id || "&mdash;"}</td>
       <td class="num">${rupees(r.amount_paise)}</td>
-      <td><span class="pill good">${r.reason_code}</span></td>
-      <td>${r.entry_type === "CASH" ? '<span class="pill good">CASH</span>' : '<span class="pill pending">ADJUSTMENT</span>'}</td>
+      <td><span class="pill good tip" data-tip="${escapeHtml(REASON_TIP[r.reason_code] || "")}">${r.reason_code}</span></td>
+      <td>${r.entry_type === "CASH" ? `<span class="pill good tip" data-tip="${escapeHtml(ENTRY_TYPE_TIP.CASH)}">CASH</span>` : `<span class="pill pending tip" data-tip="${escapeHtml(ENTRY_TYPE_TIP.ADJUSTMENT)}">ADJUSTMENT</span>`}</td>
       <td class="num">${r.confidence}</td>
-      <td>${r.auto_posted ? '<span class="pill good">auto-posted</span>' : '<span class="pill pending">human touch</span>'}</td>
+      <td>${r.auto_posted ? `<span class="pill good tip" data-tip="${escapeHtml(LEDGER_STATUS_TIP.auto)}">auto-posted</span>` : `<span class="pill pending tip" data-tip="${escapeHtml(LEDGER_STATUS_TIP.human)}">human touch</span>`}</td>
     </tr>`).join("") : '<tr class="empty-row"><td colspan="7">No resolved allocations yet.</td></tr>';
 
   const excBody = document.getElementById("exceptions-body");
@@ -552,7 +604,7 @@ function renderState(state) {
     <tr data-pid="${r.payment_id}">
       <td class="mono">${r.payment_id}</td>
       <td class="num">${rupees(r.amount_paise)}</td>
-      <td><span class="pill bad">${r.reason_code}</span>${r.pending ? ' <span class="pill pending">retryable</span>' : ''}</td>
+      <td><span class="pill bad tip" data-tip="${escapeHtml(REASON_TIP[r.reason_code] || "")}">${r.reason_code}</span>${r.pending ? ' <span class="pill pending">retryable</span>' : ''}</td>
       <td>${escapeHtml(r.rationale)}</td>
     </tr>`).join("") : '<tr class="empty-row"><td colspan="4">Exception queue is empty.</td></tr>';
 
@@ -565,7 +617,7 @@ function renderState(state) {
     const colName = `<td>${escapeHtml(c.name)}</td>`;
     const colVA = `<td class="mono">${c.virtual_account}</td>`;
     const statusPill = c.status === "CLEAN" ? "good" : c.status === "PROVISIONAL" ? "bad" : "pending";
-    const colStatus = `<td><span class="pill ${statusPill}">${c.status}</span></td>`;
+    const colStatus = `<td><span class="pill ${statusPill} tip" data-tip="${escapeHtml(CUSTOMER_STATUS_TIP[c.status] || "")}">${c.status}</span></td>`;
     const colOpenCount = `<td class="num">${c.open_invoice_count}</td>`;
     const colBalance = `<td class="num">${rupees(c.certain_balance_paise)}</td>`;
     const colCredit = `<td class="num">${c.unapplied_credit_paise ? rupees(c.unapplied_credit_paise) : "&mdash;"}</td>`;
@@ -649,24 +701,89 @@ function renderTrace(trace, finalResult) {
     const el = document.createElement("div");
     el.className = "trace-result" + (finalResult.isException ? " exception" : "");
     el.style.animationDelay = (trace.length * 180) + "ms";
-    el.innerHTML = finalResult.html;
+    el.innerHTML = (finalResult.plain
+      ? `<div class="trace-result-plain">${escapeHtml(finalResult.plain)}</div>` : "") + finalResult.html;
     content.appendChild(el);
   }
 }
 
-function describeOutcome(resp) {
+/* -- Section C: plain-English readout, no codes -- generated from the
+   actual result (customer name, real amounts, what changed), shown
+   above the technical reason-code line, which stays as-is. */
+function findInvoice(resp, invoiceId) {
+  return (resp.state.invoices || []).find(i => i.invoice_id === invoiceId);
+}
+
+function resolveCustomerName(resp, payment) {
+  if (payment.payer_name) return payment.payer_name;
+  const cust = (resp.state.customers || []).find(c => c.virtual_account === payment.virtual_account);
+  return cust ? cust.name : null;
+}
+
+function plainSentence(resp, payment) {
+  const amt = rupees(payment.amount_paise);
+
+  if (!resp.resolved) {
+    const name = resolveCustomerName(resp, payment) || "the sender";
+    if (resp.pending_reason === "AMBIG-N") {
+      return `We know ${name} sent ${amt}, but we cannot tell which of their bills it settles.`;
+    }
+    return `We know ${name} sent ${amt}, but nothing they currently owe adds up to that amount.`;
+  }
+
+  const rows = resp.allocation;
+  const primary = rows.find(r => r.invoice_id) || rows[0];
+  const code = primary.reason_code;
+
+  if (code === "SUSPENSE") {
+    return `${amt} arrived, but we don't know who sent it -- the account it came from doesn't match any customer.`;
+  }
+
+  const who = resolveCustomerName(resp, payment) || "The customer";
+  const inv = primary.invoice_id ? findInvoice(resp, primary.invoice_id) : null;
+  const adjRow = rows.find(r => r.entry_type === "ADJUSTMENT");
+
+  switch (code) {
+    case "EXACT":
+      return `${who} paid ${amt} for ${primary.invoice_id}. It is now fully settled.`;
+    case "REF-FUZZY":
+      return `${who} paid ${amt} but wrote the bill number wrong. We worked out they meant ${primary.invoice_id}, and it is now closed.`;
+    case "PART-EXP":
+      return `${who} paid ${amt} towards a ${inv ? rupees(inv.amount_paise) : "larger"} bill.`
+        + (inv ? ` ${rupees(inv.balance_paise)} is still owed.` : "");
+    case "RESID-DED":
+      return `${who} paid ${amt} against ${primary.invoice_id}, deliberately less than the full amount. `
+        + `The bill is closed and ${adjRow ? rupees(adjRow.amount_paise) : "the gap"} is recorded as a deduction.`;
+    case "TOL-FEE":
+      return `${who} paid ${amt} on ${primary.invoice_id}. The `
+        + `${adjRow ? rupees(adjRow.amount_paise) : "small"} shortfall was small enough to write off, so the bill is closed.`;
+    case "BULK-N": {
+      const ids = rows.filter(r => r.invoice_id).map(r => r.invoice_id);
+      return `${who} sent ${amt} in one payment, covering ${ids.length} bills at once (${ids.join(", ")}). All are now closed.`;
+    }
+    case "FIFO-TIE":
+      return `${who} paid ${amt} against one of several identical bills. We closed the oldest one, ${primary.invoice_id}.`;
+    case "DUP-ONACC":
+      return `${who} paid ${amt} again for a bill that was already settled. It's held as credit for their next bill.`;
+    default:
+      return `${who} paid ${amt}.`;
+  }
+}
+
+function describeOutcome(resp, payment) {
+  const plain = plainSentence(resp, payment);
   if (resp.resolved) {
     const rows = resp.allocation;
     const primary = rows.find(r => r.invoice_id) || rows[0];
     const html = `<b>${primary.reason_code}</b> &middot; ${primary.invoice_id ? "invoice " + primary.invoice_id : "no invoice"} &middot; confidence ${primary.confidence}<br>${primary.rationale}`;
-    return {isException: primary.reason_code === "SUSPENSE", html};
+    return {isException: primary.reason_code === "SUSPENSE", plain, html};
   }
-  return {isException: true, html: `<b>${resp.pending_reason}</b> &middot; parked for review<br>${resp.trace[resp.trace.length-1]?.note || ""}`};
+  return {isException: true, plain, html: `<b>${resp.pending_reason}</b> &middot; parked for review<br>${resp.trace[resp.trace.length-1]?.note || ""}`};
 }
 
-async function handlePaymentResponse(resp) {
+async function handlePaymentResponse(resp, payment) {
   const traceWithAction = [...resp.trace, buildActionStep(resp)];
-  renderTrace(traceWithAction, describeOutcome(resp));
+  renderTrace(traceWithAction, describeOutcome(resp, payment));
   renderState(resp.state);
   if (resp.resolved) flashRow(resp.payment_id);
   resp.resolved_on_requeue.forEach(pid => {
@@ -681,7 +798,7 @@ async function submitFields(fields) {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify(fields),
   });
-  return await handlePaymentResponse(resp);
+  return await handlePaymentResponse(resp, fields);
 }
 
 document.getElementById("payment-form").addEventListener("submit", async e => {
@@ -916,7 +1033,7 @@ async function playLoop() {
       payment_id: p.payment_id, created_at: p.created_at,
     }),
   });
-  await handlePaymentResponse(resp);
+  await handlePaymentResponse(resp, p);
   play.index += 1;
   updatePlayProgress();
   if (play.running && !play.paused) setTimeout(playLoop, play.speedMs);
