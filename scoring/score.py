@@ -151,6 +151,25 @@ def score(gt: dict, actual: dict) -> dict:
     reason_breakdown: dict[str, dict] = defaultdict(lambda: {"expected": 0, "correct": 0})
     mismatches = []
 
+    # Resolution-level confusion counts -- threshold-independent, distinct from
+    # precision_at_default_threshold below (which is gated by the confidence
+    # dial). Positive = the engine resolved the payment (a non-exception
+    # reason code) rather than sending it to the exception queue; ground-truth
+    # positive = the spec expected a resolution at all. TP requires not just
+    # "resolved" but "resolved correctly" (same code_ok/invoices_ok check as
+    # the match-rate loop below) -- a wrong invoice on an otherwise-resolved
+    # payment is a miss, not a hit.
+    #
+    # gt_positive is checked BEFORE pred_positive below: a payment ground
+    # truth says should have resolved, but that the engine either refused
+    # OR resolved with the wrong code/invoice, is a false_negative either
+    # way -- "correct allocations that existed but we missed (refused, or
+    # given the wrong reason code)". false_positive is reserved for the
+    # other kind of wrong: the engine resolved a payment ground truth says
+    # should have stayed an exception -- an allocation invented where none
+    # should exist.
+    true_positives = false_positives = false_negatives = true_negatives = 0
+
     for pid, g in gt.items():
         a = actual[pid]
         reason_breakdown[g["expected_reason_code"]]["expected"] += 1
@@ -171,6 +190,25 @@ def score(gt: dict, actual: dict) -> dict:
                 "actual_invoice_ids": sorted(a["invoice_ids"]),
                 "notes": g["notes"],
             })
+
+        pred_positive = a["reason_code"] not in EXCEPTION_CODES
+        gt_positive = g["expected_reason_code"] not in EXCEPTION_CODES
+        if pred_positive and gt_positive and is_correct:
+            true_positives += 1
+        elif gt_positive:
+            false_negatives += 1
+        elif pred_positive:
+            false_positives += 1
+        else:
+            true_negatives += 1
+
+    precision = (round(true_positives / (true_positives + false_positives), 4)
+                 if (true_positives + false_positives) else None)
+    recall = (round(true_positives / (true_positives + false_negatives), 4)
+              if (true_positives + false_negatives) else None)
+    f1 = (round(2 * precision * recall / (precision + recall), 4)
+          if precision is not None and recall is not None and (precision + recall) > 0
+          else None)
 
     for code, d in reason_breakdown.items():
         d["accuracy"] = round(d["correct"] / d["expected"], 4) if d["expected"] else None
@@ -234,6 +272,13 @@ def score(gt: dict, actual: dict) -> dict:
     return {
         "totals": {"payments": total},
         "overall_match_rate": round(correct / total, 4),
+        "true_positives": true_positives,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives,
+        "true_negatives": true_negatives,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
         "reason_code_breakdown": dict(sorted(reason_breakdown.items())),
         "mismatches": mismatches,
         "auto_resolution_rate": auto_resolution_rate,
@@ -275,6 +320,12 @@ def main() -> None:
         json.dump(result, f, indent=2)
 
     print(f"overall_match_rate: {result['overall_match_rate']*100:.1f}%")
+    print(f"confusion: TP={result['true_positives']} FP={result['false_positives']} "
+          f"FN={result['false_negatives']} TN={result['true_negatives']}")
+    def _pctstr(x):
+        return "n/a" if x is None else f"{x*100:.1f}%"
+    print(f"precision: {_pctstr(result['precision'])}  "
+          f"recall: {_pctstr(result['recall'])}  f1: {_pctstr(result['f1'])}")
     print(f"auto_resolution_rate: {result['auto_resolution_rate']*100:.1f}%")
     print(f"human_touches: {result['human_touches']} "
           f"(raw exceptions: {result['raw_exception_count']})")

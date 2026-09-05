@@ -440,115 +440,180 @@ def build_holdout_world() -> World:
     is on its own dedicated customer, no sharing (these are meant to be
     adversarial, not efficient).
 
-    Four categories are expected to pass -- two because the engine
-    already handles them correctly, two because of the principled fixes
-    in engine/pipeline.py (single reason code on an overpayment; refusing
-    non-positive amounts). Two are documented misses: the engine has no
-    temporal check and no conflicting-reference check, so it confidently
-    produces the wrong answer. `notes` on each ground-truth row says
+    Seven categories, three instances each (21 records -- large enough to
+    quote a percentage on, unlike the original 6-record set). Five
+    categories are expected to pass -- correctly resolved or correctly
+    refused. Two are documented misses: the engine has no temporal check
+    and no conflicting-reference check, so it confidently produces the
+    wrong answer on every instance. `notes` on each ground-truth row says
     which is which -- scoring/score.py's existing mismatch reporting
     surfaces the misses without any new code.
+
+    Two of the "correctly refuses" shapes (truncated narration,
+    wrong-customer VA) were verified directly against
+    engine.pipeline.resolve_payment() before being committed here, not
+    just reasoned about -- an earlier draft of the phantom-reference case
+    in this same file turned out to get accidentally *repaired* by L3
+    (its fake id was fuzzy-close enough to a real one), and an earlier
+    draft of wrong-customer-VA got accidentally repaired to the *wrong*
+    customer's own invoice (sequential ids one digit apart). Both
+    generator functions below carry a comment explaining the specific
+    collision they were built to avoid.
     """
     w = World()
 
-    # ---- H1. Phantom reference: well-formed but nonexistent invoice ID;
-    # amount also fits nothing real for this customer. Expect: L1 finds
-    # no reference hit, amount/subset-sum find nothing either -> NO-MATCH.
-    cust = w.add_customer()
-    w.add_invoice(cust["customer_id"], rupees(45_000),
-                  issue_offset=-20, due_offset=-5)
-    pay = w.add_payment(
-        rupees(12_345), cust["virtual_account"], cust["name"],
-        f"NEFT/{cust['name']}/INV-9999 SETTLEMENT",
-        created_offset=-2)
-    w.add_gt(pay["payment_id"], "NO-MATCH", [],
-              notes="phantom reference: well-formed but nonexistent invoice "
-                    "ID ('INV-9999' was never issued), amount also fits "
-                    "nothing real -- expect the engine to refuse rather "
-                    "than hallucinate a match")
-
-    # ---- H2. 2x overpayment with an exact reference. Expect: EXACT on
-    # the referenced invoice, excess parked on account, single reason
-    # code (engine/pipeline.py fix in this same round).
-    cust = w.add_customer()
-    inv = w.add_invoice(cust["customer_id"], rupees(30_000),
-                         issue_offset=-15, due_offset=-1)
-    pay = w.add_payment(
-        inv["amount_paise"] * 2, cust["virtual_account"], cust["name"],
-        f"NEFT/{cust['name']}/{inv['invoice_id']} SETTLEMENT",
-        created_offset=-2)
-    w.add_gt(pay["payment_id"], "EXACT", [inv["invoice_id"]],
-              notes="2x overpayment, exact reference -- invoice clears, "
-                    "excess parked on account, single reason code")
-
-    # ---- H3. Near-identical payer names: the free-text payer_name
-    # resembles a *different* customer's name, but virtual_account
-    # correctly identifies the real one. Expect: L0 resolves by VA only,
-    # payer_name is only a confidence signal, never used for routing.
-    cust_a = w.add_customer(name="Kavya Textiles")
-    w.add_customer(name="Kavya Textilez")  # lookalike name, unrelated customer
-    inv_a = w.add_invoice(cust_a["customer_id"], rupees(60_000),
-                           issue_offset=-12, due_offset=2)
-    pay = w.add_payment(
-        inv_a["amount_paise"], cust_a["virtual_account"],
-        payer_name="Kavya Textilez",
-        narration=f"NEFT/Kavya Textilez/{inv_a['invoice_id']} SETTLEMENT",
-        created_offset=-1)
-    w.add_gt(pay["payment_id"], "EXACT", [inv_a["invoice_id"]],
-              notes="payer_name resembles a different customer's name, but "
-                    "virtual_account correctly identifies the real one -- "
-                    "identity must resolve from VA, not the free-text name")
-
-    # ---- H4. Refund / negative amount. Expect: the non-positive-amount
-    # guard (engine/pipeline.py fix in this same round) refuses rather
-    # than corrupting the invoice balance.
-    cust = w.add_customer()
-    inv = w.add_invoice(cust["customer_id"], rupees(25_000),
-                         issue_offset=-10, due_offset=5)
-    pay = w.add_payment(
-        -rupees(5_000), cust["virtual_account"], cust["name"],
-        f"NEFT/{cust['name']}/{inv['invoice_id']} REFUND",
-        created_offset=-1)
-    w.add_gt(pay["payment_id"], "NO-MATCH", [],
-              notes="refund / negative amount -- outside supported scope; "
-                    "engine must refuse rather than silently inflate the "
-                    "invoice balance")
-
-    # ---- H5. DOCUMENTED MISS: payment predates its invoice's
+    # ---- H1. DOCUMENTED MISS: payment predates its invoice's
     # issue_date. Nothing in the matching path checks temporal order, so
     # this still resolves EXACT even though a payment for an unissued
     # invoice is nonsensical -- not fixed this round.
-    cust = w.add_customer()
-    inv = w.add_invoice(cust["customer_id"], rupees(40_000),
-                         issue_offset=5, due_offset=20)  # "issued" in the future
-    pay = w.add_payment(
-        inv["amount_paise"], cust["virtual_account"], cust["name"],
-        f"NEFT/{cust['name']}/{inv['invoice_id']} SETTLEMENT",
-        created_offset=-1)  # arrives before the invoice exists
-    w.add_gt(pay["payment_id"], "NO-MATCH", [],
-              notes="DOCUMENTED MISS: payment predates its invoice's "
-                    "issue_date; the engine has no temporal check and "
-                    "will resolve this EXACT anyway -- future work")
+    def gen_predates_invoice(i: int) -> None:
+        cust = w.add_customer()
+        inv = w.add_invoice(cust["customer_id"], rupees(RNG.randint(20_000, 70_000)),
+                             issue_offset=5 + i, due_offset=20 + i)  # "issued" in the future
+        pay = w.add_payment(
+            inv["amount_paise"], cust["virtual_account"], cust["name"],
+            f"NEFT/{cust['name']}/{inv['invoice_id']} SETTLEMENT",
+            created_offset=-1 - i)  # arrives before the invoice exists
+        w.add_gt(pay["payment_id"], "NO-MATCH", [],
+                  notes="DOCUMENTED MISS: payment predates its invoice's "
+                        "issue_date; the engine has no temporal check and "
+                        "will resolve this EXACT anyway -- future work")
 
-    # ---- H6. DOCUMENTED MISS: narration names two invoice IDs, amount
+    # ---- H2. DOCUMENTED MISS: narration names two invoice IDs, amount
     # fits only one. Falls through to amount-only matching and
     # confidently returns EXACT, silently ignoring the conflicting
-    # second reference.
-    cust = w.add_customer()
-    inv_x = w.add_invoice(cust["customer_id"], rupees(50_000),
-                           issue_offset=-14, due_offset=1)
-    inv_y = w.add_invoice(cust["customer_id"], rupees(70_000),
-                           issue_offset=-13, due_offset=2)
-    pay = w.add_payment(
-        inv_x["amount_paise"], cust["virtual_account"], cust["name"],
-        f"NEFT/{cust['name']}/{inv_x['invoice_id']} AND "
-        f"{inv_y['invoice_id']} SETTLEMENT",
-        created_offset=-1)
-    w.add_gt(pay["payment_id"], "AMBIG-N", [],
-              notes="DOCUMENTED MISS: narration names two invoice IDs, "
-                    "amount fits only one -- the engine falls through to "
-                    "amount-only matching and confidently returns EXACT, "
-                    "silently ignoring the conflicting second reference")
+    # second reference. inv_y's amount is built as an offset from inv_x's
+    # so the two can never accidentally collide (which would let the
+    # payment amount-match both, changing the scenario's shape).
+    def gen_conflicting_refs(i: int) -> None:
+        cust = w.add_customer()
+        inv_x = w.add_invoice(cust["customer_id"], rupees(RNG.randint(30_000, 60_000)),
+                               issue_offset=-14 - i, due_offset=1 - i)
+        inv_y = w.add_invoice(cust["customer_id"],
+                               inv_x["amount_paise"] + rupees(RNG.randint(5_000, 20_000)),
+                               issue_offset=-13 - i, due_offset=2 - i)
+        pay = w.add_payment(
+            inv_x["amount_paise"], cust["virtual_account"], cust["name"],
+            f"NEFT/{cust['name']}/{inv_x['invoice_id']} AND "
+            f"{inv_y['invoice_id']} SETTLEMENT",
+            created_offset=-1 - i)
+        w.add_gt(pay["payment_id"], "AMBIG-N", [],
+                  notes="DOCUMENTED MISS: narration names two invoice IDs, "
+                        "amount fits only one -- the engine falls through to "
+                        "amount-only matching and confidently returns EXACT, "
+                        "silently ignoring the conflicting second reference")
+
+    # ---- H3. Refund / negative amount. Expect: the non-positive-amount
+    # guard refuses rather than corrupting the invoice balance.
+    def gen_refund(i: int) -> None:
+        cust = w.add_customer()
+        inv = w.add_invoice(cust["customer_id"], rupees(RNG.randint(15_000, 50_000)),
+                             issue_offset=-10 - i, due_offset=5 - i)
+        pay = w.add_payment(
+            -rupees(RNG.randint(2_000, 8_000)), cust["virtual_account"], cust["name"],
+            f"NEFT/{cust['name']}/{inv['invoice_id']} REFUND",
+            created_offset=-1 - i)
+        w.add_gt(pay["payment_id"], "NO-MATCH", [],
+                  notes="refund / negative amount -- outside supported scope; "
+                        "engine must refuse rather than silently inflate the "
+                        "invoice balance")
+
+    # ---- H4. Near-identical payer names: the free-text payer_name
+    # resembles a *different* customer's name, but virtual_account
+    # correctly identifies the real one. Expect: L0 resolves by VA only,
+    # payer_name is only a confidence signal, never used for routing.
+    def gen_lookalike_name(i: int) -> None:
+        base_name = f"{RNG.choice(FIRST_NAMES)} {RNG.choice(SUFFIXES)}"
+        lookalike = base_name + "z"
+        cust_a = w.add_customer(name=base_name)
+        w.add_customer(name=lookalike)  # lookalike name, unrelated customer
+        inv_a = w.add_invoice(cust_a["customer_id"], rupees(RNG.randint(20_000, 90_000)),
+                               issue_offset=-12 - i, due_offset=2 - i)
+        pay = w.add_payment(
+            inv_a["amount_paise"], cust_a["virtual_account"],
+            payer_name=lookalike,
+            narration=f"NEFT/{lookalike}/{inv_a['invoice_id']} SETTLEMENT",
+            created_offset=-1 - i)
+        w.add_gt(pay["payment_id"], "EXACT", [inv_a["invoice_id"]],
+                  notes="payer_name resembles a different customer's name, but "
+                        "virtual_account correctly identifies the real one -- "
+                        "identity must resolve from VA, not the free-text name")
+
+    # ---- H5. 2x overpayment with an exact reference. Expect: EXACT on
+    # the referenced invoice, excess parked on account, single reason code.
+    def gen_overpayment(i: int) -> None:
+        cust = w.add_customer()
+        inv = w.add_invoice(cust["customer_id"], rupees(RNG.randint(15_000, 60_000)),
+                             issue_offset=-15 - i, due_offset=-1 - i)
+        pay = w.add_payment(
+            inv["amount_paise"] * 2, cust["virtual_account"], cust["name"],
+            f"NEFT/{cust['name']}/{inv['invoice_id']} SETTLEMENT",
+            created_offset=-2 - i)
+        w.add_gt(pay["payment_id"], "EXACT", [inv["invoice_id"]],
+                  notes="2x overpayment, exact reference -- invoice clears, "
+                        "excess parked on account, single reason code")
+
+    # ---- H6. Truncated narration -- the bank cuts the reference off
+    # mid-way. Truncated to invoice_id[:5] (e.g. "INV-0187" -> "INV-0",
+    # a single trailing digit) -- short enough that
+    # reference.extract_tokens() doesn't even pull it out as a candidate
+    # token (its regex needs >=2 digits), so L3 never gets anything to
+    # repair. The payment amount is drawn from a disjoint range so
+    # amount-only matching can't paper over it either. A 2-digit
+    # truncation ("INV-01") was tried first and reliably got REPAIRED
+    # (falls inside L3's containment-repair bar, diff<=2) -- verified
+    # directly against engine.pipeline.resolve_payment() before settling
+    # on the 1-digit cut, which produces a clean NO-MATCH end to end.
+    def gen_truncated_narration(i: int) -> None:
+        cust = w.add_customer()
+        inv = w.add_invoice(cust["customer_id"], rupees(RNG.randint(25_000, 90_000)),
+                             issue_offset=-20 - i, due_offset=-5 - i)
+        truncated_ref = inv["invoice_id"][:5]
+        pay = w.add_payment(
+            rupees(RNG.randint(5_000, 15_000)), cust["virtual_account"], cust["name"],
+            f"NEFT/{cust['name']}/{truncated_ref}",
+            created_offset=-2 - i)
+        w.add_gt(pay["payment_id"], "NO-MATCH", [],
+                  notes=f"truncated narration: the bank cut the reference off "
+                        f"to '{truncated_ref}', too short to extract as a "
+                        "candidate token at all, let alone repair -- amount "
+                        "also fits nothing real, expect a clean refusal")
+
+    # ---- H7. Wrong-customer virtual account -- narration correctly names
+    # a real invoice, but the payment lands in a DIFFERENT customer's VA
+    # (a payer error, not an engine bug). The receiving customer has zero
+    # open invoices, so there is nothing for L3 or amount-matching to find
+    # regardless of what the (irrelevant, wrong) referenced id says.
+    # First draft gave the receiving customer their own invoice -- an
+    # unlucky sequential-id fuzzy match (INV-0100 vs INV-0200, one digit
+    # apart, ratio ~0.86) got silently repaired to the wrong customer's
+    # own bill, exactly the false match this case is meant to demonstrate
+    # the engine avoiding. Zero invoices removes that risk entirely
+    # rather than relying on generated ids staying numerically distant.
+    def gen_wrong_customer_va(i: int) -> None:
+        intended = w.add_customer()  # the invoice's real owner -- never paid
+        wrong = w.add_customer()     # receives the money by payer error, no invoices
+        inv = w.add_invoice(intended["customer_id"], rupees(RNG.randint(20_000, 90_000)),
+                             issue_offset=-16 - i, due_offset=-1 - i)
+        pay = w.add_payment(
+            inv["amount_paise"], wrong["virtual_account"], intended["name"],
+            f"NEFT/{intended['name']}/{inv['invoice_id']} SETTLEMENT",
+            created_offset=-1 - i)
+        w.add_gt(pay["payment_id"], "NO-MATCH", [],
+                  notes=f"wrong-customer virtual account: narration correctly "
+                        f"names {inv['invoice_id']}, but the payment was sent "
+                        f"into {wrong['name']}'s account instead of "
+                        f"{intended['name']}'s -- identity resolves from VA "
+                        "as designed, and the receiving customer has no open "
+                        "invoices this could settle, so the engine correctly "
+                        "refuses rather than guessing across customers")
+
+    N = 3
+    for gen in (gen_predates_invoice, gen_conflicting_refs, gen_refund,
+                gen_lookalike_name, gen_overpayment, gen_truncated_narration,
+                gen_wrong_customer_va):
+        for i in range(N):
+            gen(i)
 
     return w
 

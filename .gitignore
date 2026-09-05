@@ -6,3 +6,7 @@ out/
 .env
 demo-shots/
 data/payments.csv
+cloudflared.exe
+cloudflared
+.ngrok.exe.old
+ngrok.exe

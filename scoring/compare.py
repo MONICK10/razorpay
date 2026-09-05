@@ -38,6 +38,12 @@ def main() -> None:
 
     rows = [
         ("Match rate", pct(submission["overall_match_rate"]), pct(holdout["overall_match_rate"])),
+        ("Precision", pct(submission["precision"]), pct(holdout["precision"])),
+        ("Recall", pct(submission["recall"]), pct(holdout["recall"])),
+        ("F1", pct(submission["f1"]), pct(holdout["f1"])),
+        ("True positives", str(submission["true_positives"]), str(holdout["true_positives"])),
+        ("False positives", str(submission["false_positives"]), str(holdout["false_positives"])),
+        ("False negatives", str(submission["false_negatives"]), str(holdout["false_negatives"])),
         ("Auto-resolution rate", pct(submission["auto_resolution_rate"]), pct(holdout["auto_resolution_rate"])),
         ("Precision @ default threshold", pct(submission["precision_at_default_threshold"]),
          pct(holdout["precision_at_default_threshold"])),

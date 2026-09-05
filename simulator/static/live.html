@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tally &mdash; Live Razorpay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap">
+<style>
+  :root {
+    --surface: #ffffff; --page: #ffffff; --text: #14213D; --text2: #44506B;
+    --muted: #6B7A99; --grid: #E4E8F0; --border: #E4E8F0;
+    --good: #16A34A; --warn: #D97706; --bad: #DC2626;
+    --deep-blue: #123B7A; --deep-blue-dark: #0C2C5C;
+    --blue: #123B7A; --blue-hover: #0E2F61;
+    --accent: #F97316;
+    --font-display: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14.5px; line-height: 1.5;
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+  }
+  h2 { font-size: 14.5px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--text2); margin: 0 0 8px; }
+  b { font-weight: 650; }
+
+  .topstrip {
+    flex: 0 0 auto; background: linear-gradient(160deg, var(--deep-blue) 0%, var(--deep-blue-dark) 100%);
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .trow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .brand { font-family: var(--font-display); font-size: 24px; font-weight: 800;
+    white-space: nowrap; color: var(--accent); letter-spacing: -.01em; }
+  .brand span { font-weight: 400; color: #B9C9EA; font-size: 14.5px; }
+  .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .live-dot.on { background: #4ADE80; box-shadow: 0 0 0 3px rgba(74,222,128,.25); }
+  .live-dot.off { background: #F87171; }
+  .status-text { font-size: 13px; color: #D7E2FA; }
+  .counters { display: flex; gap: 18px; font-size: 14.5px; color: #E8EEFA; }
+  .counters .c b { font-family: var(--mono); font-size: 15px; color: #fff; }
+  .poll-note { margin-left: auto; font-size: 13px; color: #B9C9EA; white-space: nowrap; }
+
+  .workspace {
+    flex: 1 1 auto; min-height: 0; display: grid;
+    grid-template-columns: 290px minmax(0, 1fr) 600px;
+    gap: 12px; padding: 12px 16px;
+  }
+  .col { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px;
+  }
+
+  .controls { flex: 0 0 auto; display: flex; flex-direction: column; gap: 7px; }
+  .controls button {
+    font: inherit; font-size: 14.5px; cursor: pointer; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface); padding: 9px 12px;
+    color: var(--text); text-align: left;
+  }
+  .controls button.primary { background: var(--text); color: var(--surface); border-color: var(--text); font-weight: 600; }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .paylist { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .paylist .prow {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-radius: 6px; font-size: 13.5px; border: 1px solid transparent; cursor: pointer;
+  }
+  .paylist .prow:hover { background: var(--page); }
+  .paylist .prow .num { color: var(--muted); font-family: var(--mono); width: 22px; flex: none; }
+  .paylist .prow .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .paylist .prow .amt { font-family: var(--mono); font-weight: 600; margin-left: auto; flex: none; }
+  .paylist .prow.cur { background: #EEF2F8; border-color: #C7D2E0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grid); flex: 0 0 auto; }
+  .dot.done { background: var(--good); }
+  .dot.check { background: var(--warn); }
+  .dot.held { background: var(--bad); }
+  .empty-note { color: var(--muted); font-size: 13.5px; font-style: italic; padding: 16px 6px; text-align: center; }
+
+  .centre { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+
+  .shops-wrap { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px 11px; background: var(--page); }
+  .shops-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin-bottom: 7px; }
+  .shops { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .shop .sh-head { font-weight: 700; font-size: 14px; margin-bottom: 3px;
+    border-bottom: 1px solid var(--grid); padding-bottom: 3px; }
+  .shop .sh-head .acct { font-family: var(--mono); font-weight: 400; font-size: 11.5px; color: var(--muted); }
+  .bill { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center;
+    font-size: 13px; padding: 2px 3px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+  .bill .bi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bill .bs { font-family: var(--mono); font-weight: 600; text-align: right; min-width: 52px; }
+  .bill .bs.paid { color: var(--good); }
+  .bill .bs.part { color: var(--warn); }
+  .bill .ba { font-family: var(--mono); text-align: right; }
+  .bill.done { color: var(--muted); }
+  .bill.hot { background: var(--warn-bg, #FFFBEB); box-shadow: inset 0 0 0 1px #FCD34D; }
+
+  .centre-detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+  .verdict {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px solid var(--border); border-left-width: 5px; border-radius: 8px;
+    padding: 9px 13px; margin-bottom: 12px;
+  }
+  .verdict.done { border-left-color: var(--good); background: #F0FDF4; }
+  .verdict.check { border-left-color: var(--warn); background: #FFFBEB; }
+  .verdict.held { border-left-color: var(--bad); background: #FEF2F2; }
+  .verdict .vbadge {
+    font-family: var(--mono); font-size: 13.5px; font-weight: 700; padding: 2px 7px;
+    border-radius: 5px; background: var(--surface); border: 1px solid var(--border);
+  }
+  .verdict .vplain { font-size: 17px; font-weight: 700; }
+  .verdict .vsure { font-size: 13.5px; color: var(--text2); margin-left: auto; white-space: nowrap; }
+  .money-note { font-size: 13.5px; color: var(--muted); margin: -6px 0 10px; }
+
+  .cur-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .cur-head .amt { font-family: var(--mono); font-weight: 700; font-size: 19px; }
+  .cur-head .who { font-size: 15.5px; }
+  .cur-head .when { color: var(--muted); font-size: 13.5px; margin-left: auto; }
+  .note-line { font-family: var(--mono); font-size: 13.5px; color: var(--text2);
+    background: var(--page); border-radius: 6px; padding: 5px 8px; margin: 7px 0; }
+  .story { font-size: 15.5px; line-height: 1.5; margin: 8px 0 12px; }
+  .intro-def { font-size: 14.5px; line-height: 1.55; }
+
+  .decide h2, .changed h2 { margin: 2px 0 5px; }
+  .tracerow { display: flex; gap: 9px; padding: 5px 0; border-bottom: 1px dashed var(--grid); }
+  .tracerow .tic {
+    flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tracerow .tic.PASS { background: #F0FDF4; color: var(--good); }
+  .tracerow .tic.FAIL { background: #FEF2F2; color: var(--bad); }
+  .tracerow .tic.SKIP { background: var(--page); color: var(--muted); }
+  .tracerow .tbody .layer { font-family: var(--mono); font-size: 11px; font-weight: 700;
+    letter-spacing: .03em; color: var(--muted); }
+  .tracerow .tbody .plain { font-size: 14px; font-weight: 600; margin: 2px 0 1px; }
+  .tracerow .tbody .note { font-size: 12.5px; color: var(--text2); }
+  .changed { margin-top: 10px; }
+  .changed p { margin: 0; font-size: 14.5px; }
+
+  .badge {
+    display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border);
+    color: var(--text2); background: var(--page);
+  }
+  .tag {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em;
+    border: 1px solid var(--bad); color: var(--bad); border-radius: 3px; padding: 0 3px; margin-left: 4px;
+  }
+
+  .rightcol { display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 12px; min-height: 0; }
+  .rightcol.draft-open { grid-template-rows: 1fr 1fr 2.3fr; }
+  .panel { min-height: 0; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .panel .pbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+  .panel .empty { color: var(--muted); font-size: 13.5px; font-style: italic; padding: 4px 0; }
+  .panel h2 { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; flex: 0 0 auto; }
+  .panel .pcount { font-family: var(--mono); color: var(--muted); font-weight: 400;
+    text-transform: none; letter-spacing: normal; margin-left: -2px; }
+  .pnum {
+    flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%;
+    background: var(--text); color: var(--surface); font-size: 11.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .psub { font-size: 12px; color: var(--muted); margin: 0 0 7px 24px; }
+
+  @keyframes landflash {
+    0% { background: #FDE68A; } 70% { background: #FDE68A; } 100% { background: transparent; }
+  }
+  .srow.flash, .qrow.flash, .arow.flash { animation: landflash 2s ease-out; }
+
+  .srow { padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .srow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .srow .l1 .n { font-family: var(--mono); color: var(--muted); }
+  .srow .l1 .amt { font-family: var(--mono); font-weight: 600; }
+  .srow .l1 .bills { color: var(--text2); }
+  .srow .l2 { display: flex; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+  .srow .l2 .plain { color: var(--text); }
+  .srow .sure { font-size: 12px; }
+  .srow .sure.ok { color: var(--good); }
+  .srow .sure.no { color: var(--warn); }
+  .srow .later { font-size: 11.5px; border: 1px solid var(--blue); color: var(--blue);
+    border-radius: 3px; padding: 0 3px; }
+  .srow .money { color: var(--muted); font-size: 12.5px; }
+
+  .qrow { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .qrow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .qrow .l1 .amt { font-family: var(--mono); font-weight: 600; }
+  .qrow .reason { color: var(--text2); margin-top: 2px; }
+
+  .arow { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px;
+    display: flex; flex-direction: column; gap: 4px; }
+  .arow .atop { display: flex; gap: 7px; align-items: baseline; }
+  .arow .mk { flex: 0 0 auto; }
+  .arow.done { color: var(--muted); }
+  .arow .senttag { margin-left: auto; color: var(--good); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .sendbtn { font: inherit; font-size: 12.5px; cursor: pointer; margin-top: 2px; align-self: flex-start;
+    border: 1px solid var(--border); background: var(--surface); border-radius: 5px; padding: 3px 10px; }
+
+  @media (max-width: 1500px) {
+    .workspace { grid-template-columns: 250px minmax(0,1fr) 480px; }
+  }
+</style>
+</head>
+<body>
+<div class="topstrip">
+  <div class="trow">
+    <div class="brand">Tally <span>&mdash; Live Razorpay</span></div>
+    <span class="live-dot" id="live-dot"></span>
+    <span class="status-text" id="status-text">Checking configuration&hellip;</span>
+  </div>
+  <div class="trow">
+    <div class="counters">
+      <span class="c">Done automatically <b id="c-done">0</b></span>
+      <span class="c">Needed a quick check <b id="c-check">0</b></span>
+      <span class="c">Could not sort <b id="c-held">0</b></span>
+    </div>
+    <span class="poll-note" id="poll-note"></span>
+  </div>
+</div>
+
+<div class="workspace">
+  <div class="col leftcol">
+    <div class="controls">
+      <button id="btn-refresh">Refresh now</button>
+    </div>
+    <div class="box paylist" id="paylist"></div>
+  </div>
+
+  <div class="col centrecol">
+    <div class="box centre" id="centre"></div>
+  </div>
+
+  <div class="col rightcol" id="rightcol">
+    <div class="panel">
+      <h2><span class="pnum">1</span> Payments we sorted out <span class="pcount" id="pcount-sorted">(0)</span></h2>
+      <div class="psub">Money we matched to a bill.</div>
+      <div class="pbody" id="p-sorted"></div>
+    </div>
+    <div class="panel">
+      <h2><span class="pnum">2</span> Payments we could not sort out <span class="pcount" id="pcount-held">(0)</span></h2>
+      <div class="psub">Money we could not place. We did not guess.</div>
+      <div class="pbody" id="p-held"></div>
+    </div>
+    <div class="panel">
+      <h2><span class="pnum">3</span> What we are doing about it <span class="pcount" id="pcount-doing">(0)</span></h2>
+      <div class="psub">The next step for each one we could not place.</div>
+      <div class="pbody" id="p-doing"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RS = p => "₹" + Math.round(p / 100).toLocaleString("en-IN");
+const esc = s => (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const HELD = new Set(["AMBIG-N", "NO-MATCH", "SUSPENSE"]);
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+let snap = null;      // last /live/state response
+let selected = null;  // payment_id currently shown in the centre, or null = "most recent"
+let flashPid = null;
+
+function bucketOf(ev) {
+  return HELD.has(ev.final_code) ? "held"
+       : (ev.confidence != null && ev.confidence >= 85) ? "done" : "check";
+}
+const badgeOf = code => esc((snap && snap.code_badge && snap.code_badge[code]) || code);
+const plainOf = code => esc((snap && snap.code_plain && snap.code_plain[code]) || "");
+
+function moneyLabel(row) {
+  if (row.code === "DUP-ONACC") return RS(row.real_paise) + " now credit";
+  if (row.code === "SUSPENSE") return RS(row.real_paise) + " set aside";
+  if (row.writeoff_paise > 0) return RS(row.real_paise) + " in, " + RS(row.writeoff_paise) + " written off";
+  return RS(row.real_paise) + " in";
+}
+
+function billRowHtml(inv, hot) {
+  const paid = inv.balance_paise <= 0;
+  const partial = !paid && inv.balance_paise < inv.amount_paise;
+  const status = paid ? { txt: "✓ Paid", cls: "paid" }
+               : partial ? { txt: RS(inv.balance_paise) + " left", cls: "part" }
+               : { txt: "", cls: "" };
+  return `<div class="bill ${paid ? "done" : ""} ${hot.includes(inv.invoice_id) ? "hot" : ""}">
+    <span class="bi">${esc(inv.invoice_id)}${inv.disputed ? '<span class="tag">disputed</span>' : ""}</span>
+    <span class="bs ${status.cls}">${status.txt}</span>
+    <span class="ba">${RS(inv.amount_paise)}</span></div>`;
+}
+
+function renderShops(hot) {
+  hot = hot || [];
+  const setup = (snap && snap.setup) || [];
+  return `<div class="shops-wrap">
+    <div class="shops-title">The shops &mdash; what they still owe</div>
+    <div class="shops">
+      ${setup.map(c => `
+        <div class="shop">
+          <div class="sh-head">${esc(c.name)} <span class="acct">${esc(c.account_number)}</span></div>
+          ${c.invoices.map(i => billRowHtml(i, hot)).join("")}
+        </div>`).join("")}
+    </div>
+  </div>`;
+}
+
+const LAYER_PLAIN = {
+  L0_IDENTITY: "Who sent this money?",
+  L1_COMPOSITE: "Did they write the bill number, and does the amount agree?",
+  L2_TOLERANCE: "Is the shortage small enough to ignore?",
+  L3_AI: "Can AI make sense of messy text?",
+  L4_POLICY: "Does a house rule settle it?",
+  L5_EXCEPTION: "We could not prove it. Here is why.",
+};
+function traceRowHtml(step) {
+  const plain = LAYER_PLAIN[step.layer] || "";
+  return `<div class="tracerow">
+    <div class="tic ${step.outcome}">${step.outcome === "PASS" ? "&check;" : step.outcome === "FAIL" ? "&times;" : "&ndash;"}</div>
+    <div class="tbody">
+      <div class="layer">${step.layer}</div>
+      ${plain ? `<div class="plain">${esc(plain)}</div>` : ""}
+      <div class="note">${esc(step.note)}</div>
+    </div>
+  </div>`;
+}
+
+function plainSentence(ev) {
+  const amt = RS(ev.amount_paise);
+  const who = ev.customer_name || "the sender";
+  if (HELD.has(ev.final_code)) {
+    if (ev.final_code === "SUSPENSE")
+      return `${amt} arrived, but we don't know who sent it -- the account it came from doesn't match any customer.`;
+    if (ev.final_code === "AMBIG-N")
+      return `We know ${who} sent ${amt}, but we cannot tell which of their bills it settles.`;
+    return `We know ${who} sent ${amt}, but nothing they currently owe adds up to that amount.`;
+  }
+  const bill = ev.bills[0];
+  switch (ev.final_code) {
+    case "EXACT": return `${who} paid ${amt} for ${bill}. It is now fully settled.`;
+    case "REF-FUZZY": return `${who} paid ${amt} but wrote the bill number wrong. We worked out they meant ${bill}, and it is now closed.`;
+    case "PART-EXP": return `${who} paid ${amt} towards a bill. Part of it is still owed.`;
+    case "RESID-DED": return `${who} paid ${amt} against ${bill}, deliberately less than the full amount. The bill is closed and the gap recorded as a deduction.`;
+    case "TOL-FEE": return `${who} paid ${amt} on ${bill}. The shortfall was small enough to write off, so the bill is closed.`;
+    case "BULK-N": return `${who} sent ${amt} in one payment, covering ${ev.bills.length} bills at once (${ev.bills.join(", ")}). All are now closed.`;
+    case "FIFO-TIE": return `${who} paid ${amt} against one of several identical bills. We closed the older one, ${bill}.`;
+    case "DUP-ONACC": return `${who} paid ${amt} again for a bill that was already settled. It's held as credit for their next bill.`;
+    default: return `${who} paid ${amt}.`;
+  }
+}
+
+function renderCentre() {
+  const el = document.getElementById("centre");
+  const events = (snap && snap.events) || [];
+  const ev = selected ? events.find(e => e.payment_id === selected) : events[events.length - 1];
+  const hot = ev ? ev.bills : [];
+  if (!ev) {
+    el.innerHTML = renderShops(hot) + `<div class="centre-detail"><p class="intro-def">
+      No payments received yet. Complete a test-mode checkout against one of the seeded
+      invoices above (see <code>python -m scripts.create_payment_link</code>) and it will
+      appear here within a few seconds.</p></div>`;
+    return;
+  }
+  const bucket = bucketOf(ev);
+  const sure = bucket === "held" ? "Held for a person to handle"
+             : bucket === "done" ? "Done automatically" : "Needs a quick check";
+  const moneyNote = !HELD.has(ev.final_code)
+    ? `<div class="money-note">${esc(moneyLabel({ code: ev.final_code, real_paise: ev.real_paise, writeoff_paise: ev.writeoff_paise }))}</div>` : "";
+  const detail = `
+    <div class="verdict ${bucket}">
+      <span class="vbadge">${badgeOf(ev.final_code)}</span>
+      <span class="vplain">${plainOf(ev.final_code)}</span>
+      <span class="vsure">${sure}</span>
+    </div>
+    ${moneyNote}
+    <div class="cur-head">
+      <span class="amt">${RS(ev.amount_paise)}</span>
+      <span class="who">from ${esc(ev.customer_name || "an unknown sender")}</span>
+      <span class="when">${esc(ev.payment_id)}</span>
+    </div>
+    <div class="note-line">Note on the transfer: ${esc(ev.narration || "(nothing written)")}</div>
+    <div class="story">${esc(plainSentence(ev))}</div>
+    <div class="decide"><h2>How it decided</h2>${(ev.trace || []).map(traceRowHtml).join("")}</div>`;
+  el.innerHTML = renderShops(hot) + `<div class="centre-detail">${detail}</div>`;
+}
+
+function renderPayList() {
+  const events = (snap && snap.events) || [];
+  const body = document.getElementById("paylist");
+  if (!events.length) {
+    body.innerHTML = '<div class="empty-note">Waiting for the first payment&hellip;</div>';
+    return;
+  }
+  const activePid = selected || events[events.length - 1].payment_id;
+  const rows = events.slice().reverse().map((ev, idx) => {
+    const n = events.length - idx;
+    let dot = "dot " + bucketOf(ev);
+    let cls = "prow" + (ev.payment_id === activePid ? " cur" : "");
+    return `<div class="${cls}" data-pid="${ev.payment_id}">
+      <span class="${dot}"></span>
+      <span class="num">${n}</span>
+      <span class="pname">${esc(ev.customer_name || "Unknown sender")}</span>
+      <span class="amt">${RS(ev.amount_paise)}</span>
+    </div>`;
+  });
+  body.innerHTML = rows.join("");
+  body.querySelectorAll(".prow").forEach(row => {
+    row.addEventListener("click", () => { selected = row.dataset.pid; render(); });
+  });
+}
+
+function renderRight() {
+  const sortedOut = (snap && snap.sorted_out) || [];
+  const couldNotSort = (snap && snap.could_not_sort) || [];
+  const doingAboutIt = (snap && snap.doing_about_it) || [];
+  document.getElementById("pcount-sorted").textContent = `(${sortedOut.length})`;
+  document.getElementById("pcount-held").textContent = `(${couldNotSort.length})`;
+  document.getElementById("pcount-doing").textContent = `(${doingAboutIt.length})`;
+  document.getElementById("c-done").textContent = sortedOut.filter(r => r.sure_ok).length;
+  document.getElementById("c-check").textContent = sortedOut.filter(r => !r.sure_ok).length;
+  document.getElementById("c-held").textContent = couldNotSort.length;
+
+  const fl = pid => (pid === flashPid ? " flash" : "");
+  const sd = document.getElementById("p-sorted");
+  sd.innerHTML = sortedOut.length ? sortedOut.map(r => `
+    <div class="srow${fl(r.payment_id)}">
+      <div class="l1"><span class="n">#${r.i}</span><span class="amt">${RS(r.amount_paise)}</span>
+        <span class="bills">&rarr; ${esc(r.bills_label)}</span></div>
+      <div class="l2"><span class="badge">${badgeOf(r.code)}</span><span class="plain">${esc(r.code_plain)}</span>
+        <span class="sure ${r.sure_ok ? "ok" : "no"}">${esc(r.how_sure)}</span>
+        ${r.sorted_later ? '<span class="later">sorted out later</span>' : ""}</div>
+      <div class="money">${esc(moneyLabel(r))}</div>
+    </div>`).join("") : '<div class="empty">Nothing matched to a bill yet.</div>';
+
+  const hd = document.getElementById("p-held");
+  hd.innerHTML = couldNotSort.length ? couldNotSort.map(r => `
+    <div class="qrow${fl(r.payment_id)}">
+      <div class="l1"><span class="n">#${r.i}</span><span class="amt">${RS(r.amount_paise)}</span>
+        <span class="badge">${badgeOf(r.code)}</span></div>
+      <div class="reason">${esc(r.reason)}</div>
+    </div>`).join("") : '<div class="empty">Nothing is stuck so far.</div>';
+
+  const dd = document.getElementById("p-doing");
+  dd.innerHTML = doingAboutIt.length ? doingAboutIt.map(a => `
+    <div class="arow ${a.done ? "done" : ""}">
+      <div class="atop"><span class="mk">${a.done ? "&check;" : "&rarr;"}</span><span>${esc(a.text)}</span>
+        ${a.sent ? '<span class="senttag">&check; sent</span>' : ""}</div>
+      ${!a.done && !a.sent ? `<button type="button" class="sendbtn" data-act="${a.action_id}">Mark sent</button>` : ""}
+    </div>`).join("") : '<div class="empty">Nothing to chase yet.</div>';
+  dd.querySelectorAll(".sendbtn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      snap = await api("/live/action/send", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action_id: btn.dataset.act }),
+      });
+      render();
+    });
+  });
+}
+
+function render() {
+  renderPayList();
+  renderCentre();
+  renderRight();
+  flashPid = null;
+}
+
+async function checkStatus() {
+  try {
+    const s = await api("/live/status");
+    document.getElementById("live-dot").className = "live-dot " + (s.enabled ? "on" : "off");
+    document.getElementById("status-text").textContent = s.enabled
+      ? "Configured -- listening for real Razorpay test-mode payments."
+      : "Not configured -- set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET in .env.";
+  } catch (err) {
+    document.getElementById("live-dot").className = "live-dot off";
+    document.getElementById("status-text").textContent = "Could not reach the server.";
+  }
+}
+
+async function poll() {
+  try {
+    const before = snap ? snap.events.length : 0;
+    snap = await api("/live/state");
+    if (snap.events.length > before && before > 0) {
+      flashPid = snap.events[snap.events.length - 1].payment_id;
+      selected = null; // jump the centre panel to the newest payment
+    }
+    render();
+    document.getElementById("poll-note").textContent = "Last checked " + new Date().toLocaleTimeString();
+  } catch (err) {
+    document.getElementById("poll-note").textContent = "Could not reach the live world.";
+  }
+}
+
+document.getElementById("btn-refresh").addEventListener("click", poll);
+
+checkStatus();
+poll();
+setInterval(poll, 3000);
+setInterval(checkStatus, 15000);
+</script>
+</body>
+</html>

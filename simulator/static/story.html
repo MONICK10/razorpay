@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tally &mdash; One Day at KFG Snacks Store</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap">
+<style>
+  :root {
+    /* Background palette: deep blue + orange + white -- the top strip is
+       a deep-blue band carrying the large "Tally" wordmark (in orange),
+       the workspace below stays white. */
+    --surface: #ffffff; --page: #ffffff; --text: #14213D; --text2: #44506B;
+    --muted: #6B7A99; --grid: #E4E8F0; --border: #E4E8F0;
+    --good: #16A34A; --warn: #D97706; --bad: #DC2626;
+    --deep-blue: #123B7A; --deep-blue-dark: #0C2C5C;
+    --blue: #123B7A; --blue-hover: #0E2F61;
+    --accent: #F97316;
+    --font-display: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14.5px; line-height: 1.5;
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+  }
+  h2 { font-size: 14.5px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--text2); margin: 0 0 8px; }
+  b { font-weight: 650; }
+
+  /* ---------- top strip: deep-blue band, large "Tally" wordmark ------- */
+  .topstrip {
+    flex: 0 0 auto; background: linear-gradient(160deg, var(--deep-blue) 0%, var(--deep-blue-dark) 100%);
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .trow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .brand { font-family: var(--font-display); font-size: 24px; font-weight: 800;
+    white-space: nowrap; color: var(--accent); letter-spacing: -.01em; }
+  .brand span { font-weight: 400; color: #B9C9EA; font-size: 14.5px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 4px 12px;
+    background: rgba(255,255,255,.08); font-size: 14.5px; color: #fff;
+  }
+  .chip b { font-family: var(--mono); }
+  .chip .sub { color: #B9C9EA; }
+
+  .toggle { margin-left: auto; display: inline-flex; border: 1px solid rgba(255,255,255,.25);
+            border-radius: 999px; padding: 2px; background: rgba(255,255,255,.08); }
+  .toggle button {
+    border: none; background: none; padding: 6px 15px; border-radius: 999px;
+    font: inherit; font-size: 14.5px; cursor: pointer; color: #D7E2FA;
+  }
+  .toggle button.on { background: var(--accent); color: #fff; font-weight: 600; }
+
+  .counters { display: flex; gap: 18px; font-size: 14.5px; color: #E8EEFA; }
+  .counters .c b { font-family: var(--mono); font-size: 15px; color: #fff; }
+  .compare { margin-left: auto; font-size: 14.5px; color: #D7E2FA; white-space: nowrap; }
+  .compare b { font-family: var(--mono); color: #fff; }
+  .compare .vs { color: #B9C9EA; }
+
+  /* ---------- workspace grid ---------- */
+  .workspace {
+    flex: 1 1 auto; min-height: 0; display: grid;
+    grid-template-columns: 290px minmax(0, 1fr) 600px;
+    gap: 12px; padding: 12px 16px;
+  }
+  .col { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px;
+  }
+
+  /* ---------- left column ---------- */
+  .controls { flex: 0 0 auto; display: flex; flex-direction: column; gap: 7px; }
+  .controls button {
+    font: inherit; font-size: 14.5px; cursor: pointer; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface); padding: 9px 12px;
+    color: var(--text); text-align: left;
+  }
+  .controls button.primary { background: var(--text); color: var(--surface); border-color: var(--text); font-weight: 600; }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .stepbtns { display: flex; gap: 7px; }
+  .stepbtns button { flex: 1 1 0; text-align: center; padding: 9px 6px; }
+  .stepbtns button.primary { text-align: center; }
+
+  .paylist { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .paylist .prow {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-radius: 6px; font-size: 13.5px; border: 1px solid transparent; cursor: pointer;
+  }
+  .paylist .prow:hover { background: var(--page); }
+  .paylist .prow.future { opacity: .5; }
+  .paylist .prow.endrow { border-top: 1px solid var(--grid); margin-top: 3px; padding-top: 8px;
+    font-weight: 600; color: var(--text2); }
+  .paylist .prow .num { color: var(--muted); font-family: var(--mono); width: 18px; flex: none; }
+  .paylist .prow .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .paylist .prow .amt { font-family: var(--mono); font-weight: 600; margin-left: auto; flex: none; }
+  .paylist .prow.cur { background: #EEF2F8; border-color: #C7D2E0; }
+  .paylist .prow.pending .dot { background: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grid); flex: 0 0 auto; }
+  .dot.done { background: var(--good); }
+  .dot.check { background: var(--warn); }
+  .dot.held { background: var(--bad); }
+
+  /* ---------- centre column ---------- */
+  .centre { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+
+  /* live "shops" strip -- always visible, top of centre */
+  .shops-wrap { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px 11px; background: var(--page); }
+  .shops-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin-bottom: 7px; }
+  .shops { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .shop .sh-head { font-weight: 700; font-size: 14px; margin-bottom: 3px;
+    border-bottom: 1px solid var(--grid); padding-bottom: 3px; }
+  .shop .sh-head .acct { font-family: var(--mono); font-weight: 400; font-size: 11.5px; color: var(--muted); }
+  /* Three columns, always: invoice id -- status -- amount. Status
+     (paid/partial/open) never replaces the amount, so a paid bill still
+     shows what it was for. */
+  .bill { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center;
+    font-size: 13px; padding: 2px 3px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+  .bill .bi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bill .bs { font-family: var(--mono); font-weight: 600; text-align: right; min-width: 52px; }
+  .bill .bs.paid { color: var(--good); }
+  .bill .bs.part { color: var(--warn); }
+  .bill .ba { font-family: var(--mono); text-align: right; }
+  .bill.done { color: var(--muted); }
+  .bill.hot { background: #FEF3C7; box-shadow: inset 0 0 0 1px #FCD34D; }
+
+  .centre-detail { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+  /* the verdict, large and first -- a viewer should know the outcome in a second */
+  .verdict {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px solid var(--border); border-left-width: 5px; border-radius: 8px;
+    padding: 9px 13px; margin-bottom: 12px;
+  }
+  .verdict.done { border-left-color: var(--good); background: #F0FDF4; }
+  .verdict.check { border-left-color: var(--warn); background: #FFFBEB; }
+  .verdict.held { border-left-color: var(--bad); background: #FEF2F2; }
+  .verdict .vbadge {
+    font-family: var(--mono); font-size: 13.5px; font-weight: 700; padding: 2px 7px;
+    border-radius: 5px; background: var(--surface); border: 1px solid var(--border);
+  }
+  .verdict .vplain { font-size: 17px; font-weight: 700; }
+  .verdict .vsure { font-size: 13.5px; color: var(--text2); margin-left: auto; white-space: nowrap; }
+  .money-note { font-size: 13.5px; color: var(--muted); margin: -6px 0 10px; }
+
+  .cur-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .cur-head .amt { font-family: var(--mono); font-weight: 700; font-size: 19px; }
+  .cur-head .who { font-size: 15.5px; }
+  .cur-head .when { color: var(--muted); font-size: 13.5px; margin-left: auto; }
+  .note-line { font-family: var(--mono); font-size: 13.5px; color: var(--text2);
+    background: var(--page); border-radius: 6px; padding: 5px 8px; margin: 7px 0; }
+  .story { font-size: 15.5px; line-height: 1.5; margin: 8px 0 12px; }
+
+  .decide h2, .changed h2 { margin: 2px 0 5px; }
+  .step { display: flex; gap: 9px; padding: 4px 0; border-bottom: 1px dashed var(--grid); }
+  .step .ic { flex: 0 0 auto; width: 16px; text-align: center; font-weight: 700; }
+  .step .ic.y { color: var(--good); }
+  .step .ic.n { color: var(--warn); }
+  .step .ic.d { color: var(--muted); }
+  .step .qa .q { font-weight: 600; }
+  .step .qa .a { color: var(--text2); }
+  .changed { margin-top: 10px; }
+  .changed p { margin: 0; font-size: 14.5px; }
+  .intro-def { font-size: 14.5px; line-height: 1.55; }
+
+  .badge {
+    display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border);
+    color: var(--text2); background: var(--page);
+  }
+  .outcome-line { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--grid);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .outcome-line .plain { font-weight: 600; }
+  .outcome-line .sure { font-size: 13.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid; }
+  .outcome-line .sure.ok { color: var(--good); border-color: var(--good); }
+  .outcome-line .sure.no { color: var(--warn); border-color: var(--warn); }
+
+  /* raw statement (Without the agent) */
+  .rawtable { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .rawtable th { text-align: left; color: var(--muted); font-weight: 600; padding: 5px 8px;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+  .rawtable td { padding: 5px 8px; border-bottom: 1px solid var(--grid); }
+  .rawtable td.n { text-align: right; font-family: var(--mono); }
+  .rawtable tr.cur td { background: #EEF2F8; }
+  .raw-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .raw-note { color: var(--text2); font-size: 14px; margin-bottom: 8px; }
+
+  .tag {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em;
+    border: 1px solid var(--bad); color: var(--bad); border-radius: 3px; padding: 0 3px; margin-left: 4px;
+  }
+
+  /* closing panel */
+  .closing .crow { padding: 9px 0; border-bottom: 1px solid var(--grid); }
+  .closing .crow .cn { font-weight: 700; font-size: 15.5px; }
+  .closing .crow .cs {
+    font-size: 13px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border);
+    margin-left: 8px; color: var(--text2);
+  }
+  .closing .crow .cs.ok { color: var(--good); border-color: var(--good); }
+  .closing .crow .cs.warn { color: var(--warn); border-color: var(--warn); }
+  .closing .crow .cl { color: var(--text2); margin-top: 2px; }
+  .closing .guess { margin-top: 5px; font-size: 13.5px; background: var(--page);
+    border-radius: 6px; padding: 6px 9px; }
+  .closing .totals { margin-top: 12px; font-size: 14.5px; line-height: 1.6; }
+
+  /* ---------- right column ---------- */
+  .rightcol { display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 12px; min-height: 0; }
+  /* when a drafted message is open, give its panel more room -- the other
+     two shrink but stay visible and keep their own internal scroll */
+  .rightcol.draft-open { grid-template-rows: 1fr 1fr 2.3fr; }
+  .panel { min-height: 0; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .panel .pbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+  .panel .empty { color: var(--muted); font-size: 13.5px; font-style: italic; padding: 4px 0; }
+  .panel h2 { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; flex: 0 0 auto; }
+  .panel .pcount { font-family: var(--mono); color: var(--muted); font-weight: 400;
+    text-transform: none; letter-spacing: normal; margin-left: -2px; }
+  .pnum {
+    flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%;
+    background: var(--text); color: var(--surface); font-size: 11.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .psub { font-size: 12px; color: var(--muted); margin: 0 0 7px 24px; }
+
+  /* a row just landed here -- draw the eye, then fade */
+  @keyframes landflash {
+    0% { background: #FDE68A; }
+    70% { background: #FDE68A; }
+    100% { background: transparent; }
+  }
+  .srow.flash, .qrow.flash, .arow.flash { animation: landflash 2s ease-out; }
+
+  .srow { padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .srow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .srow .l1 .n { font-family: var(--mono); color: var(--muted); }
+  .srow .l1 .amt { font-family: var(--mono); font-weight: 600; }
+  .srow .l1 .bills { color: var(--text2); }
+  .srow .l2 { display: flex; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+  .srow .l2 .plain { color: var(--text); }
+  .srow .sure { font-size: 12px; }
+  .srow .sure.ok { color: var(--good); }
+  .srow .sure.no { color: var(--warn); }
+  .srow .later { font-size: 11.5px; border: 1px solid var(--blue); color: var(--blue);
+    border-radius: 3px; padding: 0 3px; }
+  .srow .money { color: var(--muted); font-size: 12.5px; }
+
+  .qrow { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .qrow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .qrow .l1 .amt { font-family: var(--mono); font-weight: 600; }
+  .qrow .reason { color: var(--text2); margin-top: 2px; }
+  .qrow .whybtn { font: inherit; font-size: 12.5px; cursor: pointer; margin-top: 4px;
+    border: 1px solid var(--border); background: var(--page); border-radius: 5px; padding: 2px 8px; }
+  .qrow .why { margin-top: 5px; font-size: 13px; color: var(--text2);
+    background: var(--page); border-radius: 6px; padding: 6px 8px; }
+
+  .arow { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px;
+    display: flex; flex-direction: column; gap: 4px; }
+  .arow .atop { display: flex; gap: 7px; align-items: baseline; }
+  .arow .mk { flex: 0 0 auto; }
+  .arow.done { color: var(--muted); }
+  .arow .senttag { margin-left: auto; color: var(--good); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .seebtn { align-self: flex-start; font: inherit; font-size: 12.5px; cursor: pointer;
+    border: none; background: none; color: var(--blue); padding: 0; text-decoration: underline; }
+  .draftbox { border: 1px solid var(--border); border-radius: 6px; background: var(--page); padding: 8px 9px; }
+  .draftbox pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word; color: var(--text); }
+  .draftbtns { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .draftbtns button { font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); border-radius: 5px; padding: 2px 10px; }
+  .draftbtns .sent-note { font-size: 12.5px; color: var(--good); }
+
+  @media (max-width: 1500px) {
+    .workspace { grid-template-columns: 250px minmax(0,1fr) 480px; }
+  }
+
+  /* -- "By hand" mode: show only what a clerk actually has -- the raw
+     statement, the whole-day comparison line, and (beside it) a manual
+     working panel showing how a person would actually do this. No app
+     results (no bill column, no codes, no answers, no next steps). ------ */
+  body.mode-without .chips { display: none; }
+  body.mode-without .counters { display: none; }
+  body.mode-without .rightcol { display: none; }
+  .rightcol-manual { display: none; }
+  body.mode-without .rightcol-manual { display: flex; }
+
+  .manualpanel .psub { margin-bottom: 10px; }
+  .mwrow { padding: 8px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .mwrow .mhead { font-weight: 600; margin-bottom: 4px; }
+  .mwrow .mhead .mn { font-family: var(--mono); color: var(--muted); margin-right: 6px; }
+  .mwrow ul { margin: 0 0 5px; padding-left: 18px; color: var(--text2); }
+  .mwrow li { margin-bottom: 2px; line-height: 1.4; }
+  .mwrow .mtime { font-size: 13px; font-weight: 600; color: var(--text2); }
+  .mwrow .mtime.unresolved { color: var(--warn); }
+  .manual-total {
+    flex: 0 0 auto; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px;
+    font-size: 14.5px; line-height: 1.6;
+  }
+  .manual-total b { font-family: var(--mono); }
+
+  /* -- persistent "ideas shown" badge, shared with /app's Seven Ideas panel */
+  .ideas-badge {
+    position: fixed; bottom: 16px; left: 16px; z-index: 40;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text2);
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  }
+  .ideas-badge b { color: var(--blue); font-family: var(--mono); }
+
+  /* -- Story's own Seven Ideas panel ------------------------------------ */
+  .storyideas-btn {
+    border: 1px solid var(--accent); color: var(--accent); background: none;
+    border-radius: 999px; padding: 6px 14px; font-size: 14.5px; font-weight: 600; cursor: pointer;
+    white-space: nowrap; font-family: inherit;
+  }
+  .storyideas-btn:hover { background: var(--accent); color: white; }
+  .storyideas-btn span { font-family: var(--mono); }
+  .storyideas-panel {
+    position: fixed; top: 0; right: 0; height: 100vh; width: 360px; z-index: 60;
+    background: var(--surface); border-left: 1px solid var(--border);
+    box-shadow: -6px 0 24px rgba(0,0,0,.16); overflow-y: auto; padding: 16px;
+    transform: translateX(100%); transition: transform .2s ease;
+  }
+  body.storyideas-open .storyideas-panel { transform: translateX(0); }
+  .storyideas-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .storyideas-header h2 { margin: 0; font-size: 15px; flex: 1 1 auto; text-transform: none; letter-spacing: normal; }
+  .storyideas-counter { font-size: 13px; font-weight: 600; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+  .storyideas-close {
+    border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer;
+    line-height: 1; padding: 2px 6px;
+  }
+  .storyideas-close:hover { color: var(--bad); }
+  .storyideas-sub { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+  .sicard {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px;
+    background: var(--page);
+  }
+  .sicard.seen { border-color: var(--good); }
+  .sicard .sititle {
+    font-size: 14.5px; font-weight: 700; margin-bottom: 5px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .sicard .sitick { font-size: 12px; font-weight: 700; color: var(--good); white-space: nowrap; }
+  .sicard .sitext { font-size: 13.5px; color: var(--text); margin-bottom: 7px; line-height: 1.4; }
+  .sicard .siwhy { font-size: 13px; color: var(--text2); margin-bottom: 5px; line-height: 1.4; }
+  .sicard .sishowbtn {
+    margin-top: 4px; border: 1px solid var(--blue); color: var(--blue); background: none;
+    border-radius: 6px; padding: 5px 11px; font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  .sicard .sishowbtn:hover { background: var(--blue); color: white; }
+  .storyideas-map { margin-top: 4px; border-top: 1px solid var(--grid); padding-top: 12px; }
+  .storyideas-map h3 {
+    font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin: 0 0 8px;
+  }
+  .storyideas-map .mrow {
+    display: flex; justify-content: space-between; font-size: 13.5px; padding: 3px 0;
+    border-bottom: 1px dashed var(--grid);
+  }
+  .storyideas-map .mrow .mi { color: var(--text2); }
+  .storyideas-map .mrow .mp { font-family: var(--mono); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="ideas-badge" id="ideas-badge">Ideas shown: <b id="ideas-badge-count">0</b> / 7</div>
+<div class="topstrip">
+  <div class="trow">
+    <div class="brand">Tally <span>&mdash; KFG Snacks Store, one day, payment by payment</span></div>
+    <div class="chips" id="chips"></div>
+    <div class="toggle">
+      <button id="tg-without">By hand</button>
+      <button id="tg-with" class="on">With the app</button>
+    </div>
+    <button type="button" class="storyideas-btn" id="storyideas-btn">Why it's built this way &mdash; <span id="storyideas-count">0</span>/7</button>
+  </div>
+  <div class="trow">
+    <div class="counters">
+      <span class="c">Sorted <b id="c-sorted">0</b></span>
+      <span class="c">Could not sort <b id="c-held">0</b></span>
+      <span class="c">Sorted out later <b id="c-later">0</b></span>
+    </div>
+    <div class="compare" id="compare"></div>
+  </div>
+</div>
+
+<div class="workspace">
+  <div class="col leftcol">
+    <div class="controls">
+      <div class="stepbtns">
+        <button id="btn-prev" title="Previous payment (left arrow)">&larr; Previous</button>
+        <button class="primary" id="btn-next" title="Next payment (right arrow)">Next &rarr;</button>
+      </div>
+      <button id="btn-play">Play the whole day</button>
+      <button id="btn-reset">Start over</button>
+    </div>
+    <div class="box paylist" id="paylist"></div>
+  </div>
+
+  <div class="col centrecol">
+    <div class="box centre" id="centre"></div>
+  </div>
+
+  <div class="col rightcol" id="rightcol">
+    <div class="panel">
+      <h2><span class="pnum">1</span> Payments we sorted out <span class="pcount" id="pcount-sorted">(0)</span></h2>
+      <div class="psub">Money we matched to a bill.</div>
+      <div class="pbody" id="p-sorted"></div>
+    </div>
+    <div class="panel">
+      <h2><span class="pnum">2</span> Payments we could not sort out <span class="pcount" id="pcount-held">(0)</span></h2>
+      <div class="psub">Money we could not place. We did not guess.</div>
+      <div class="pbody" id="p-held"></div>
+    </div>
+    <div class="panel">
+      <h2><span class="pnum">3</span> What we are doing about it <span class="pcount" id="pcount-doing">(0)</span></h2>
+      <div class="psub">The next step for each one we could not place.</div>
+      <div class="pbody" id="p-doing"></div>
+    </div>
+  </div>
+
+  <div class="col rightcol-manual" id="rightcol-manual">
+    <div class="panel manualpanel">
+      <h2>Doing it by hand</h2>
+      <div class="psub">Every row takes the same effort to check, whether it turns out easy or hard.</div>
+      <div class="pbody" id="manual-list"></div>
+      <div class="manual-total" id="manual-total"></div>
+    </div>
+  </div>
+</div>
+
+<aside class="storyideas-panel" id="storyideas-panel">
+  <div class="storyideas-header">
+    <h2>Why it's built this way</h2>
+    <span class="storyideas-counter" id="storyideas-counter">0 of 7</span>
+    <button type="button" class="storyideas-close" id="storyideas-close">&#10005;</button>
+  </div>
+  <p class="storyideas-sub">Seven ideas behind this app. "Show me" jumps to the payment that proves it. Ticks itself off as the day reaches that payment.</p>
+  <div id="storyideas-list"></div>
+  <div class="storyideas-map">
+    <h3>Which payment proves which idea</h3>
+    <div id="storyideas-maprows"></div>
+  </div>
+</aside>
+
+<script>
+const RS = p => "₹" + Math.round(p / 100).toLocaleString("en-IN");
+const esc = s => (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const HELD = new Set(["AMBIG-N", "NO-MATCH", "SUSPENSE"]);
+const badgeOf = (s, code) => esc((s.code_badge && s.code_badge[code]) || code);
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+let mode = new URLSearchParams(location.search).get("view") === "byhand" ? "without" : "with";
+let playing = false;
+let H = [];              // the whole day, frozen: H[k] = frame after payment k (H[0] = opening)
+let view = 0;            // which frame is on screen (0 = opening, 1..13 = payments, 14 = end of day)
+let flashN = null;       // payment number to flash on this render, then clear
+let sentSet = new Set(); // action ids a person has clicked Send on (overlaid on the frozen frames)
+const CLOSING_VIEW = 14;
+const expandedDrafts = new Set();
+
+function frame() { return H[Math.min(view, H.length - 1)]; }
+function bucketOf(s, ev) {
+  return HELD.has(ev.final_code) ? "held"
+       : (ev.confidence != null && ev.confidence >= s.threshold) ? "done" : "check";
+}
+
+function moneyLabel(row) {
+  if (row.code === "DUP-ONACC") return RS(row.real_paise) + " now credit";
+  if (row.code === "SUSPENSE") return RS(row.real_paise) + " set aside";
+  if (row.writeoff_paise > 0)
+    return RS(row.real_paise) + " in, " + RS(row.writeoff_paise) + " written off";
+  if (row.code === "PART-EXP") return RS(row.real_paise) + " in (part)";
+  return RS(row.real_paise) + " in";
+}
+
+function renderTop(s) {
+  document.getElementById("chips").innerHTML = s.customers.map(c => {
+    const sub = c.bills_unclear ? ` <span class="sub">(${esc(c.status_plain)})</span>` : "";
+    return `<span class="chip">${esc(c.name.split(" ")[0])} <b>${RS(c.certain_balance_paise)}</b>${sub}</span>`;
+  }).join("");
+  document.getElementById("c-sorted").textContent = s.counts.sorted;
+  document.getElementById("c-held").textContent = s.counts.could_not_sort;
+  document.getElementById("c-later").textContent = s.counts.sorted_later;
+  const w = s.comparison.with, wo = s.comparison.without;
+  document.getElementById("compare").innerHTML =
+    `<span class="vs">Over the whole day &mdash;</span> ` +
+    `By hand: <b>${wo.rows_to_read}</b>&nbsp;rows, <b>${wo.decisions}</b>&nbsp;decisions, about <b>${wo.minutes}&nbsp;min</b>` +
+    ` <span class="vs">&nbsp;·&nbsp;</span> ` +
+    `With the app: <b>${w.rows_to_read}</b>&nbsp;rows, <b>${w.decisions}</b>&nbsp;checks, about <b>${w.minutes}&nbsp;min</b>`;
+}
+
+function renderPayList(s) {
+  const rows = s.raw_statement.map(p => {
+    const ev = s.events.find(e => e.n === p.n);
+    let cls = "prow", dot = "dot";
+    if (ev) dot += " " + bucketOf(s, ev);
+    else cls += " future";           // not yet seen at this point in the story
+    if (view === p.n) cls += " cur";
+    return `<div class="${cls}" data-n="${p.n}">
+      <span class="${dot}"></span>
+      <span class="num">${p.n}</span>
+      <span class="pname">${esc(p.customer)}</span>
+      <span class="amt">${RS(p.amount_paise)}</span>
+    </div>`;
+  });
+  rows.push(`<div class="prow endrow ${view === CLOSING_VIEW ? "cur" : ""}" data-n="end">
+      <span class="dot"></span><span class="num">&#9633;</span>
+      <span>End of the day</span><span class="amt"></span></div>`);
+  document.getElementById("paylist").innerHTML = rows.join("");
+  const curEl = document.querySelector(".prow.cur");
+  if (curEl) curEl.scrollIntoView({ block: "nearest" });
+}
+
+function stepHtml(st) {
+  const ic = st.ok === true ? '<span class="ic y">&check;</span>'
+           : st.ok === false ? '<span class="ic n">&times;</span>'
+           : '<span class="ic d">&ndash;</span>';
+  return `<div class="step">${ic}<div class="qa"><div class="q">${esc(st.q)}</div><div class="a">${esc(st.a)}</div></div></div>`;
+}
+
+function billStatus(i) {
+  // Status and amount are always separate columns -- status never
+  // replaces the amount, so a paid bill still shows what it was for.
+  if (i.balance_paise <= 0) return { txt: "✓ Paid", cls: "paid" };
+  if (i.balance_paise < i.amount_paise) return { txt: RS(i.balance_paise) + " left", cls: "part" };
+  return { txt: "", cls: "" };
+}
+
+function renderShops(s, hot) {
+  hot = hot || [];
+  return `<div class="shops">
+    ${s.setup.map(c => `
+      <div class="shop">
+        <div class="sh-head">${esc(c.name)} <span class="acct">${esc(c.account_number)}</span></div>
+        ${c.invoices.map(i => {
+          const st = billStatus(i);
+          const paid = i.balance_paise <= 0;
+          return `<div class="bill ${paid ? "done" : ""} ${hot.includes(i.invoice_id) ? "hot" : ""}">
+            <span class="bi">${i.invoice_id}${i.disputed ? '<span class="tag">disputed</span>' : ""}</span>
+            <span class="bs ${st.cls}">${st.txt}</span>
+            <span class="ba">${RS(i.amount_paise)}</span></div>`;
+        }).join("")}
+      </div>`).join("")}
+  </div>`;
+}
+
+function renderCentreIntro(s) {
+  return `<p class="intro-def">Every payment arrives with an <b>account number</b> &mdash; a number
+    that belongs to one shop only, so we always know who paid. The job on this page is
+    <b>reconciliation</b>: matching the money that arrives to the bills we sent out.</p>
+    <p class="intro-def" style="margin-top:14px;">Press <b>Next payment</b> to start the day.
+    Thirteen payments come in. Watch the bills above go from open to paid.</p>`;
+}
+
+function renderCentreCurrent(s, ev) {
+  const bucket = bucketOf(s, ev);
+  const sure = bucket === "held" ? "Held for a person to handle"
+             : bucket === "done" ? "Done automatically" : "Needs a quick check";
+  const sorted = s.sorted_out.find(r => r.n === ev.n);
+  const moneyNote = sorted ? `<div class="money-note">${esc(moneyLabel(sorted))}</div>` : "";
+  return `
+    <div class="verdict ${bucket}">
+      <span class="vbadge">${badgeOf(s, ev.final_code)}</span>
+      <span class="vplain">${esc(s.code_plain[ev.final_code] || "")}</span>
+      <span class="vsure">${sure}</span>
+    </div>
+    ${moneyNote}
+    <div class="cur-head">
+      <span class="amt">${RS(ev.amount_paise)}</span>
+      <span class="who">from ${esc(ev.customer_name || "an unknown sender")}</span>
+      <span class="when">payment ${ev.n} of 13</span>
+    </div>
+    <div class="note-line">Note on the transfer: ${esc(ev.narration || "(nothing written)")}</div>
+    <div class="story">${esc(ev.story_line)}</div>
+    <div class="decide"><h2>How it decided</h2>${ev.how_it_decided.map(stepHtml).join("")}</div>
+    <div class="changed"><h2>What changed</h2><p>${esc(ev.what_changed)}</p></div>`;
+}
+
+function renderCentreClosing(s) {
+  const rows = s.customers.map(c => {
+    const warn = c.bills_unclear;
+    let guess = "";
+    if (warn) {
+      const parts = c.best_guess.map(g => `${RS(g.amount_paise)} finishes bill ${g.invoice_id}`);
+      if (c.not_yet_placed_paise > 0)
+        parts.push(`the last ${RS(c.not_yet_placed_paise)} is not matched to a bill yet`);
+      guess = `<div class="guess"><b>What they owe (exact):</b> ${RS(c.certain_balance_paise)}
+        &nbsp;&mdash;&nbsp; <b>which bills, our best guess:</b> ${parts.join("; ")}.</div>`;
+    } else if (c.credit_held_paise > 0) {
+      guess = `<div class="guess">${RS(c.credit_held_paise)} is sitting as credit for their next bill.</div>`;
+    }
+    return `<div class="crow">
+      <span class="cn">${esc(c.name)}</span>
+      <span class="cs ${warn ? "warn" : "ok"}">${esc(c.status_plain)}</span>
+      <div class="cl">${esc(c.ending_line)}</div>
+      ${guess}
+    </div>`;
+  }).join("");
+  const named = s.could_not_sort.filter(r => r.code !== "SUSPENSE").reduce((a, r) => a + r.amount_paise, 0);
+  const unknown = s.could_not_sort.filter(r => r.code === "SUSPENSE").reduce((a, r) => a + r.amount_paise, 0);
+  return `
+    <h2>End of the day</h2>
+    ${rows}
+    <div class="totals">
+      <b>13 payments.</b> ${s.counts.sorted} sorted, ${s.counts.could_not_sort} we could not sort.
+      ${s.counts.sorted_later} that were stuck at first sorted themselves out once we knew more.
+      ${RS(named + unknown)} is still waiting on an answer &mdash; ${RS(named)} from Deccan that we
+      could not place, and ${RS(unknown)} from a sender we could not name.</div>`;
+}
+
+function renderCentreRaw(s) {
+  return `
+    <div class="raw-note">This is the bank statement on its own &mdash; no bill, no reason, no
+      idea how sure. Someone has to work out every row by hand.</div>
+    <div class="raw-wrap">
+      <table class="rawtable">
+        <thead><tr><th>#</th><th>When</th><th>Amount</th><th>Who it looks like</th><th>Note on the transfer</th></tr></thead>
+        <tbody>
+          ${s.raw_statement.map(p => `
+            <tr class="${p.n === view ? "cur" : ""}">
+              <td class="n">${p.n}</td><td>${esc(p.time)}</td>
+              <td class="n">${RS(p.amount_paise)}</td>
+              <td>${esc(p.payer)}</td><td>${esc(p.note)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderCentre(s) {
+  const el = document.getElementById("centre");
+  const closing = view === CLOSING_VIEW;
+  const ev = (view >= 1 && view <= 13) ? s.events[view - 1] : null;
+  const hot = ev ? ev.bills : [];
+  const shopsHtml = `
+    <div class="shops-wrap">
+      <div class="shops-title">The shops &mdash; what they still owe</div>
+      ${renderShops(s, hot)}
+    </div>`;
+  if (mode === "without") {
+    el.classList.remove("closing");
+    el.innerHTML = shopsHtml + renderCentreRaw(s);
+    return;
+  }
+  let detail;
+  if (closing) detail = renderCentreClosing(s);
+  else if (view === 0) detail = renderCentreIntro(s);
+  else detail = renderCentreCurrent(s, ev);
+  el.classList.toggle("closing", closing);
+  el.innerHTML = shopsHtml + `<div class="centre-detail">${detail}</div>`;
+}
+
+function renderRight(s) {
+  const fl = n => (n === flashN ? " flash" : "");
+  const flashCid = flashN
+    ? (s.could_not_sort.find(r => r.n === flashN) || {}).customer_id : null;
+
+  document.getElementById("pcount-sorted").textContent = `(${s.sorted_out.length})`;
+  document.getElementById("pcount-held").textContent = `(${s.could_not_sort.length})`;
+  document.getElementById("pcount-doing").textContent = `(${s.doing_about_it.length})`;
+
+  const sd = document.getElementById("p-sorted");
+  sd.innerHTML = s.sorted_out.length ? s.sorted_out.map(r => `
+    <div class="srow${fl(r.n)}">
+      <div class="l1"><span class="n">#${r.n}</span><span class="amt">${RS(r.amount_paise)}</span>
+        <span class="bills">&rarr; ${esc(r.bills_label)}</span></div>
+      <div class="l2"><span class="badge">${badgeOf(s, r.code)}</span><span class="plain">${esc(r.code_plain)}</span>
+        <span class="sure ${r.sure_ok ? "ok" : "no"}">${esc(r.how_sure)}</span>
+        ${r.sorted_later ? '<span class="later">sorted out later</span>' : ""}</div>
+      <div class="money">${esc(moneyLabel(r))}</div>
+    </div>`).join("") : '<div class="empty">Nothing matched to a bill yet.</div>';
+
+  const hd = document.getElementById("p-held");
+  hd.innerHTML = s.could_not_sort.length ? s.could_not_sort.map(r => `
+    <div class="qrow${fl(r.n)}">
+      <div class="l1"><span class="n">#${r.n}</span><span class="amt">${RS(r.amount_paise)}</span>
+        <span class="badge">${badgeOf(s, r.code)}</span></div>
+      <div class="reason">${esc(r.reason)}</div>
+      <button class="whybtn" data-pid="${r.payment_id}">Why?</button>
+      <div class="why" id="why-${r.payment_id}" hidden>${esc(r.why)}</div>
+    </div>`).join("") : '<div class="empty">Nothing is stuck. Everything so far has been sorted.</div>';
+
+  const dd = document.getElementById("p-doing");
+  dd.innerHTML = s.doing_about_it.length ? s.doing_about_it.map(a => {
+    const open = expandedDrafts.has(a.action_id);
+    const sent = sentSet.has(a.action_id);
+    const flashThis = a.action_id === `query-${flashCid}`
+      || (flashN != null && a.action_id === `hold-PAY-${String(flashN).padStart(2, "0")}`);
+    const draft = a.draft ? `
+      <button class="seebtn" data-act="${a.action_id}">${open ? "Hide the message" : "See the message"}</button>
+      <div class="draftbox" ${open ? "" : "hidden"}>
+        <pre>${esc(a.draft)}</pre>
+        <div class="draftbtns">
+          <button class="copybtn" data-act="${a.action_id}">Copy</button>
+          ${sent
+            ? '<span class="sent-note">&check; marked as sent</span>'
+            : `<button class="sendbtn" data-act="${a.action_id}">Send</button>`}
+        </div>
+      </div>` : "";
+    return `<div class="arow ${a.done ? "done" : ""}${flashThis ? " flash" : ""}">
+      <div class="atop"><span class="mk">${a.done ? "&check;" : "&rarr;"}</span><span>${esc(a.text)}</span>
+        ${sent ? '<span class="senttag">&check; sent</span>' : ""}</div>
+      ${draft}
+    </div>`;
+  }).join("") : '<div class="empty">Nothing to chase yet.</div>';
+  document.getElementById("rightcol").classList.toggle("draft-open", expandedDrafts.size > 0);
+
+  // Newest row is always first (sorted by -n) -- scroll each panel back
+  // to the top so the row that just landed is visible without having
+  // to scroll up to find it.
+  ["p-sorted", "p-held", "p-doing"].forEach(id => {
+    document.getElementById(id).scrollTop = 0;
+  });
+}
+
+function render() {
+  const s = frame();
+  renderTop(s);
+  renderPayList(s);
+  renderCentre(s);
+  renderRight(s);
+  document.getElementById("btn-prev").disabled = view === 0 || playing;
+  document.getElementById("btn-next").disabled = view >= CLOSING_VIEW || playing;
+  document.getElementById("btn-play").textContent = playing ? "Stop" : "Play the whole day";
+  document.getElementById("btn-reset").disabled = playing;
+  document.getElementById("tg-with").classList.toggle("on", mode === "with");
+  document.getElementById("tg-without").classList.toggle("on", mode === "without");
+  document.body.classList.toggle("mode-without", mode === "without");
+  flashN = null;
+}
+
+function setView(v) {
+  view = Math.max(0, Math.min(v, CLOSING_VIEW));
+  flashN = (view >= 1 && view <= 13) ? view : null;
+  render();
+  noteViewReached(view);
+}
+
+function goNext() { if (!playing && view < CLOSING_VIEW) setView(view + 1); }
+function goPrev() { if (!playing && view > 0) setView(view - 1); }
+function goTo(target) {
+  if (playing) return;
+  setView(target === "end" ? CLOSING_VIEW : Number(target));
+}
+
+async function copyText(txt, btn) {
+  try {
+    await navigator.clipboard.writeText(txt);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+  const old = btn.textContent;
+  btn.textContent = "Copied";
+  setTimeout(() => { btn.textContent = old; }, 1500);
+}
+
+/* -- navigation (pure history playback -- never re-runs the engine) -- */
+document.getElementById("paylist").addEventListener("click", e => {
+  const row = e.target.closest(".prow");
+  if (row) goTo(row.dataset.n);
+});
+document.getElementById("btn-prev").addEventListener("click", goPrev);
+document.getElementById("btn-next").addEventListener("click", goNext);
+document.getElementById("btn-reset").addEventListener("click", async () => {
+  if (playing) return;
+  const r = await api("/story/reset", { method: "POST" });
+  H = r.history; sentSet = new Set(r.sent); view = 0; expandedDrafts.clear();
+  render();
+  resetStoryIdeasSeen();
+});
+document.getElementById("btn-play").addEventListener("click", async () => {
+  if (playing) { playing = false; render(); return; }   // click again to stop
+  playing = true;
+  if (view >= CLOSING_VIEW) setView(0);
+  render();
+  while (view < CLOSING_VIEW && playing) {
+    await new Promise(res => setTimeout(res, view === 0 ? 700 : 3000));
+    if (!playing) break;
+    setView(view + 1);
+  }
+  playing = false;
+  render();
+});
+document.addEventListener("keydown", e => {
+  const t = (e.target.tagName || "");
+  if (t === "INPUT" || t === "TEXTAREA" || e.target.isContentEditable) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
+});
+
+document.getElementById("tg-with").addEventListener("click", () => { mode = "with"; render(); });
+document.getElementById("tg-without").addEventListener("click", () => { mode = "without"; render(); });
+
+/* -- why? and drafted messages -- */
+document.getElementById("p-held").addEventListener("click", e => {
+  const btn = e.target.closest(".whybtn");
+  if (!btn) return;
+  const box = document.getElementById("why-" + btn.dataset.pid);
+  if (box) { box.hidden = !box.hidden; btn.textContent = box.hidden ? "Why?" : "Hide"; }
+});
+document.getElementById("p-doing").addEventListener("click", async e => {
+  const see = e.target.closest(".seebtn");
+  if (see) {
+    const id = see.dataset.act;
+    if (expandedDrafts.has(id)) expandedDrafts.delete(id); else expandedDrafts.add(id);
+    renderRight(frame());
+    return;
+  }
+  const cp = e.target.closest(".copybtn");
+  if (cp) { copyText(cp.closest(".draftbox").querySelector("pre").textContent, cp); return; }
+  const sd = e.target.closest(".sendbtn");
+  if (sd) {
+    sd.disabled = true;
+    try {
+      const r = await api("/story/action/send", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action_id: sd.dataset.act }),
+      });
+      sentSet = new Set(r.sent); render();
+    } catch (err) { alert(err.message); sd.disabled = false; }
+  }
+});
+
+api("/story/state").then(r => {
+  H = r.history; sentSet = new Set(r.sent); view = 0;
+  render();
+  noteViewReached(0);
+}).catch(e => {
+  document.getElementById("centre").innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+});
+
+/* -- "Doing it by hand" -- the manual working panel for By-hand mode ---- */
+const STORY_MANUAL_WORK = [
+  { n: 1, label: "Rs 5,000, note says INV-01", minutes: 2, steps: [
+    "Look up KUMAR STORES in the customer file",
+    "Open their unpaid bills",
+    "Find INV-01. It is Rs 5,000. Amounts agree.",
+    "Mark it paid.",
+  ], resolvedAtEnd: true },
+  { n: 2, label: "Rs 9,000, note says INV02", minutes: 4, steps: [
+    "Look up KUMAR STORES",
+    "Search for INV02. No such bill.",
+    "Read again. Probably INV-02?",
+    "Check INV-02 is Rs 9,000. It is.",
+    "Decide it is the same bill. Mark it paid.",
+  ], resolvedAtEnd: true },
+  { n: 3, label: "Rs 1,960, note says INV-03", minutes: 3, steps: [
+    "Look up KUMAR STORES",
+    "Find INV-03. It is Rs 2,000.",
+    "Only Rs 1,960 arrived. Rs 40 short.",
+    "Decide: is Rs 40 a bank fee worth ignoring?",
+    "Mark it paid, note Rs 40 written off.",
+  ], resolvedAtEnd: true },
+  { n: 4, label: "Rs 8,000, no note", minutes: 5, steps: [
+    "Look up KUMAR STORES",
+    "Two bills open: Rs 3,500 and Rs 4,500",
+    "Add them by hand. Rs 8,000.",
+    "Mark both paid.",
+  ], resolvedAtEnd: true },
+  { n: 5, label: "Rs 5,000, note says INV-01 (again)", minutes: 4, steps: [
+    "Look up KUMAR STORES",
+    "Find INV-01 in the file",
+    "Check the ledger: already marked paid, from payment 1",
+    "Realise this is a repeat payment",
+    "Decide what to do with the extra Rs 5,000 -- hold it as credit",
+  ], resolvedAtEnd: true },
+  { n: 6, label: "Rs 6,000, no note", minutes: 6, unresolved: true, steps: [
+    "Look up PRIYA MART",
+    "Three bills open, all Rs 6,000",
+    "No way to tell which",
+    "One is under dispute -- does it matter which?",
+    "Pick one? Ask her? Leave it?",
+  ], resolvedAtEnd: true },
+  { n: 7, label: "Rs 6,000, no note (again)", minutes: 5, unresolved: true, steps: [
+    "Look up PRIYA MART",
+    "Same three Rs 6,000 bills, still open",
+    "Same problem as the last payment",
+    "Still no way to tell which",
+    "Add to the same question as before",
+  ], resolvedAtEnd: true },
+  { n: 8, label: "Rs 6,000, note says INV-08 dispute settled", minutes: 6, steps: [
+    "Look up PRIYA MART",
+    "Read note: INV-08, dispute settled",
+    "Find INV-08. It is Rs 6,000. Mark it paid.",
+    "Only two identical bills left now -- go back to the two payments held earlier",
+    "Assign one bill to each. Mark both paid.",
+  ], resolvedAtEnd: true },
+  { n: 9, label: "Rs 8,000, note says part payment INV-09", minutes: 3, steps: [
+    "Look up DECCAN TRADERS",
+    "Find INV-09. It is Rs 15,000.",
+    "Note says \"part payment\"",
+    "Record Rs 8,000 against it. Rs 7,000 still owed.",
+  ], resolvedAtEnd: true },
+  { n: 10, label: "Rs 9,000, note says INV-11 net of TDS", minutes: 5, steps: [
+    "Look up DECCAN TRADERS",
+    "Find INV-11. It is Rs 10,000.",
+    "Note says he kept Rs 1,000 back for tax",
+    "Decide if that is a real deduction or an excuse",
+    "Mark it closed, log Rs 1,000 as a tax write-off",
+  ], resolvedAtEnd: true },
+  { n: 11, label: "Rs 4,300, no note", minutes: 6, unresolved: true, steps: [
+    "Look up DECCAN TRADERS",
+    "Two bills open: Rs 7,000 left, Rs 20,000",
+    "Rs 4,300 matches neither",
+    "Try adding combinations -- nothing works",
+    "Leave it. Flag to ask Deccan.",
+  ], resolvedAtEnd: false },
+  { n: 12, label: "Rs 2,800, no note (again)", minutes: 5, unresolved: true, steps: [
+    "Look up DECCAN TRADERS",
+    "Same two bills, still open",
+    "Rs 2,800 matches nothing, alone or combined",
+    "Add to the same question as the last one",
+  ], resolvedAtEnd: false },
+  { n: 13, label: "Rs 4,200, cash deposit", minutes: 8, unresolved: true, steps: [
+    "No name, no account",
+    "Check the branch record?",
+    "Call the bank?",
+  ], resolvedAtEnd: false },
+];
+
+function renderManualWork() {
+  const box = document.getElementById("manual-list");
+  box.innerHTML = STORY_MANUAL_WORK.map(r => `
+    <div class="mwrow">
+      <div class="mhead"><span class="mn">#${r.n}</span>${esc(r.label)}</div>
+      <ul>${r.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
+      <div class="mtime${r.unresolved ? " unresolved" : ""}">${r.minutes} min${r.unresolved ? ", unresolved" : ""}</div>
+    </div>`).join("");
+
+  const totalMinutes = STORY_MANUAL_WORK.reduce((a, r) => a + r.minutes, 0);
+  const stillUnresolved = STORY_MANUAL_WORK.filter(r => !r.resolvedAtEnd).length;
+  document.getElementById("manual-total").innerHTML =
+    `<b>${totalMinutes} minutes</b> of manual work, all 13 payments checked. ` +
+    `<b>${stillUnresolved}</b> still unresolved at the end of the day.`;
+}
+renderManualWork();
+
+/* -- Story's own Seven Ideas panel -------------------------------------- */
+const STORY_IDEAS = [
+  {
+    title: "1. We never ask the AI how sure it is",
+    text: "An AI says “92% sure” whether it is right or wrong. So we count instead: bill number right +50, amount right +30, only one possible bill +20.",
+    why: "You can check every point.",
+    payment: 2,
+  },
+  {
+    title: "2. Knowing WHO is not knowing WHICH",
+    text: "Razorpay tells us Kumar paid. It cannot tell us which of his three bills.",
+    why: "This app starts where Razorpay stops.",
+    payment: 6,
+  },
+  {
+    title: "3. A refusal is not forever",
+    text: "Priya's payment made no sense at first. Later money arrived and it sorted itself.",
+    why: "Most stuck lists only grow. This one empties.",
+    payment: 8,
+  },
+  {
+    title: "4. We separate what we know from what we guess",
+    text: "Deccan owes exactly Rs 19,900. Which bills that clears, we do not know. We say both.",
+    why: "A guess should never look like a fact.",
+    payment: 12,
+  },
+  {
+    title: "5. A write-off is not money",
+    text: "Rs 1,960 arrived on a Rs 2,000 bill. Rs 1,960 is cash. Rs 40 is written off. It never arrived.",
+    why: "Counting it would overstate what we received.",
+    payment: 3,
+  },
+  {
+    title: "6. We do not just flag problems",
+    text: "Cannot tell which bill? It writes the email. Paid twice? It moves the credit to the next bill, by itself.",
+    why: "Flagging is not finishing.",
+    payment: 5,
+  },
+  {
+    title: "7. The AI has one small job",
+    text: "It reads messy text and picks from bills we hand it. It cannot invent a bill. It can say “I don't know”.",
+    why: "Small job, checkable answer.",
+    payment: 2,
+  },
+];
+
+let maxViewReached = 0;
+let storyIdeasSeen = new Array(STORY_IDEAS.length).fill(false);
+
+function noteViewReached(v) {
+  if (v > maxViewReached) maxViewReached = v;
+  STORY_IDEAS.forEach((idea, i) => {
+    if (maxViewReached >= idea.payment) storyIdeasSeen[i] = true;
+  });
+  renderStoryIdeas();
+}
+
+function resetStoryIdeasSeen() {
+  maxViewReached = 0;
+  storyIdeasSeen = new Array(STORY_IDEAS.length).fill(false);
+  renderStoryIdeas();
+}
+
+function renderStoryIdeas() {
+  const count = storyIdeasSeen.filter(Boolean).length;
+  document.getElementById("storyideas-count").textContent = count;
+  document.getElementById("storyideas-counter").textContent = `${count} of 7`;
+
+  const box = document.getElementById("storyideas-list");
+  box.innerHTML = STORY_IDEAS.map((idea, i) => `
+    <div class="sicard ${storyIdeasSeen[i] ? "seen" : ""}">
+      <div class="sititle">
+        <span>${esc(idea.title)}</span>
+        ${storyIdeasSeen[i] ? '<span class="sitick">&check; seen</span>' : ""}
+      </div>
+      <div class="sitext">${esc(idea.text)}</div>
+      <div class="siwhy">Because: ${esc(idea.why)}</div>
+      <button type="button" class="sishowbtn" data-idx="${i}">Show me</button>
+    </div>`).join("");
+
+  const map = document.getElementById("storyideas-maprows");
+  map.innerHTML = STORY_IDEAS.map((idea, i) => `
+    <div class="mrow"><span class="mi">Idea ${i + 1}</span><span class="mp">Payment ${idea.payment}</span></div>`).join("");
+}
+
+document.getElementById("storyideas-btn").addEventListener("click", () => {
+  document.body.classList.add("storyideas-open");
+});
+document.getElementById("storyideas-close").addEventListener("click", () => {
+  document.body.classList.remove("storyideas-open");
+});
+document.getElementById("storyideas-list").addEventListener("click", e => {
+  const btn = e.target.closest(".sishowbtn");
+  if (!btn) return;
+  const idea = STORY_IDEAS[Number(btn.dataset.idx)];
+  if (!idea) return;
+  goTo(idea.payment);
+  document.body.classList.remove("storyideas-open");
+});
+
+renderStoryIdeas();
+
+/* -- "ideas shown" badge: reads state written by /app's Seven Ideas panel - */
+const IDEAS_SEEN_KEY = "sevenIdeasSeen";
+function renderIdeasBadge() {
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(IDEAS_SEEN_KEY) || "[]"); } catch {}
+  const count = Array.isArray(seen) ? seen.filter(Boolean).length : 0;
+  document.getElementById("ideas-badge-count").textContent = count;
+}
+renderIdeasBadge();
+window.addEventListener("storage", e => {
+  if (e.key === IDEAS_SEEN_KEY) renderIdeasBadge();
+});
+</script>
+</body>
+</html>

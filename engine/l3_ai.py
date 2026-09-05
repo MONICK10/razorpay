@@ -75,13 +75,11 @@ def repair_reference(token: str, candidates: list[dict]) -> ReferenceRepair:
             "are common. If no candidate is a confident, unambiguous match, "
             "set matched_invoice_id to null rather than guessing.")
 
-        response = client.messages.parse(
-            model="claude-opus-5",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-            output_format=Result,
-        )
-        result = response.parsed_output
+        result = client.complete_structured(prompt, Result)
+        if result is None:
+            inv_id, score = reference.repair(token, [c["invoice_id"] for c in candidates])
+            rationale = f"fallback after AI error: score={score:.2f}"
+            return ReferenceRepair(inv_id, rationale, ai_used=False)
         valid_ids = {c["invoice_id"] for c in candidates}
         matched = result.matched_invoice_id
         if matched is not None and matched not in valid_ids:
@@ -130,13 +128,9 @@ def choose_candidate(payment: dict, candidates: list[dict]) -> ShortlistChoice:
             "disputed invoice is tied with a clean one -- set "
             "chosen_invoice_id to null rather than guessing.")
 
-        response = client.messages.parse(
-            model="claude-opus-5",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-            output_format=Result,
-        )
-        result = response.parsed_output
+        result = client.complete_structured(prompt, Result)
+        if result is None:
+            return _stub_choose(candidates)
         valid_ids = {c["invoice_id"] for c in candidates}
         chosen = result.chosen_invoice_id
         if chosen is not None and chosen not in valid_ids:

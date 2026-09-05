@@ -2,42 +2,63 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AI Finance Controller</title>
+<title>Tally</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap">
 <style>
   :root {
-    --surface: #fcfcfb; --page: #f2f2ef; --text: #0b0b0b; --text2: #52514e;
-    --muted: #898781; --grid: #e1e0d9; --border: #d8d7cf;
-    --good: #0ca30c; --warning: #c98600; --critical: #d03b3b; --blue: #2a78d6;
+    /* Background palette: deep blue + orange + white, all three doing
+       real visual work (not just accents) -- the hero band is deep
+       blue, the CTA/highlights are orange, the body is white. */
+    --surface: #ffffff; --page: #ffffff; --text: #14213D; --text2: #44506B;
+    --muted: #6B7A99; --grid: #E4E8F0; --border: #E4E8F0;
+    --good: #16A34A; --warning: #D97706; --critical: #DC2626;
+    --deep-blue: #123B7A; --deep-blue-dark: #0C2C5C; --deep-blue-hover: #0E2F61;
+    --blue: #123B7A; --blue-hover: #0E2F61;
+    --accent: #F97316; --accent-hover: #EA580C;
+    /* categorical slots 2-6 (slot 1 is --blue), for the charts only --
+       fixed order, unrelated to the --accent brand color above. */
+    --accent2: #4F46E5; --aqua: #0891B2; --yellow: #CA8A04; --magenta: #DB2777;
+    --violet: #6D28D9;
+    --font-display: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--page); color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 15px; line-height: 1.55;
+    font-size: 17px; line-height: 1.6;
   }
-  main { max-width: 760px; margin: 0 auto; padding: 56px 24px 80px; }
+  main { max-width: 800px; margin: 0 auto; padding: 0 24px 80px; }
   .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 28px 32px; margin-bottom: 20px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 32px 36px; margin-bottom: 22px;
   }
 
-  /* -- title block -------------------------------------------------- */
-  .hero { text-align: center; padding: 12px 0 36px; }
-  .hero h1 { font-size: 32px; margin: 0 0 10px; letter-spacing: -.01em; }
-  .hero .subtitle { font-size: 16.5px; color: var(--text2); margin: 0 0 14px; max-width: 520px;
-    margin-left: auto; margin-right: auto; }
+  /* -- title block: full-bleed deep-blue hero band, large centered
+     wordmark + caption, orange accent pill -- ---------------------- */
+  .hero-band {
+    width: 100%; background: linear-gradient(160deg, var(--deep-blue) 0%, var(--deep-blue-dark) 100%);
+    padding: 64px 24px 56px; margin-bottom: 40px;
+  }
+  .hero { text-align: center; max-width: 800px; margin: 0 auto; }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 800; color: #ffffff;
+    font-size: 64px; margin: 0 0 16px; letter-spacing: -.02em; line-height: 1;
+  }
+  .hero .subtitle { font-size: 20px; color: #D7E2FA; margin: 0 0 20px; max-width: 560px;
+    margin-left: auto; margin-right: auto; line-height: 1.5; }
   .hero .track {
-    display: inline-block; font-size: 11.5px; color: var(--muted); text-transform: uppercase;
-    letter-spacing: .05em; border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+    display: inline-block; font-size: 14px; color: var(--accent); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; border: 1.5px solid var(--accent);
+    border-radius: 999px; padding: 6px 16px;
   }
 
   h2 {
-    font-size: 12px; margin: 0 0 16px; color: var(--text2); text-transform: uppercase;
+    font-size: 13px; margin: 0 0 18px; color: var(--text2); text-transform: uppercase;
     letter-spacing: .06em; font-weight: 700;
   }
-  .card p { margin: 0 0 12px; color: var(--text); font-size: 15px; }
+  .card p { margin: 0 0 12px; color: var(--text); font-size: 17px; }
   .card p:last-child { margin-bottom: 0; }
 
   /* -- layer diagram -------------------------------------------------- */
@@ -53,46 +74,61 @@
   }
   .layer-row:last-child { border-left: 2px solid transparent; }
   .layer-code {
-    flex: none; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--blue);
+    flex: none; font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--blue);
     border: 1px solid var(--blue); border-radius: 6px; padding: 2px 7px; margin-top: 1px;
     white-space: nowrap;
   }
-  .layer-q { font-size: 14.5px; color: var(--text); padding-top: 1px; }
+  .layer-q { font-size: 18px; color: var(--text); padding-top: 1px; }
   .layers-tagline {
     margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--grid);
-    font-size: 13.5px; color: var(--text2); text-align: center; font-style: italic;
+    font-size: 15px; color: var(--text2); text-align: center; font-style: italic;
   }
 
   /* -- numbers tiles -------------------------------------------------- */
   .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
   .tile { background: var(--page); border: 1px solid var(--grid); border-radius: 10px;
     padding: 14px 12px; text-align: center; }
-  .tile .n { font-family: var(--mono); font-weight: 700; font-size: 22px; color: var(--text); }
+  .tile .n { font-family: var(--mono); font-weight: 700; font-size: 26px; color: var(--text); }
   .tile .n.good { color: var(--good); }
-  .tile .l { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em;
+  .tile .l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em;
     margin-top: 4px; }
-  .holdout-line { font-size: 12.5px; color: var(--text2); text-align: center; }
+  .holdout-line { font-size: 14px; color: var(--text2); text-align: center; }
   .numbers-unavailable { font-size: 13px; color: var(--muted); text-align: center; padding: 8px 0; }
   @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+
+  /* -- charts (dataviz skill: hand-rolled inline SVG, no dependencies) -- */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-box { background: var(--page); border: 1px solid var(--grid); border-radius: 10px; padding: 14px; }
+  .chart-title { font-size: 13px; color: var(--text2); font-weight: 700; margin-bottom: 8px;
+    text-transform: uppercase; letter-spacing: .03em; }
+  .chart-box svg { display: block; overflow: visible; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .chart-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text2); }
+  .chart-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .chart-empty { font-size: 14px; color: var(--muted); text-align: center; padding: 30px 0; }
 
   /* -- CTA -------------------------------------------------------- */
   .cta-wrap { text-align: center; padding: 20px 0 0; }
   .cta-btn {
     display: inline-block; background: var(--blue); color: white; text-decoration: none;
-    font-size: 16px; font-weight: 700; padding: 15px 38px; border-radius: 10px;
-    box-shadow: 0 4px 16px rgba(42,120,214,.28); transition: transform .12s ease, box-shadow .12s ease;
+    font-size: 18px; font-weight: 700; padding: 15px 38px; border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(18,59,122,.28); transition: transform .12s ease, box-shadow .12s ease;
   }
-  .cta-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(42,120,214,.36); }
+  .cta-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(18,59,122,.36); }
+  .cta-btn.secondary { background: var(--surface); color: var(--blue); border: 1px solid var(--blue); box-shadow: none; margin-left: 10px; }
+  .cta-btn.secondary:hover { box-shadow: 0 4px 14px rgba(18,59,122,.18); }
 </style>
 </head>
 <body>
-<main>
+<div class="hero-band">
   <div class="hero">
-    <h1>AI Finance Controller</h1>
+    <h1>Tally</h1>
     <p class="subtitle">Payment-to-invoice reconciliation that knows when it doesn't know.</p>
     <span class="track">Razorpay Buildathon &middot; Track 04</span>
   </div>
-
+</div>
+<main>
   <div class="card">
     <h2>The problem</h2>
     <p>A merchant sends out hundreds of bills a month. Money comes back into their bank
@@ -125,8 +161,20 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>At a glance</h2>
+    <div class="charts-grid">
+      <div class="chart-box"><div class="chart-title">Outcome split, at the current dial</div><div id="chart-donut"></div></div>
+      <div class="chart-box"><div class="chart-title">Exception value by reason code</div><div id="chart-hbar"></div></div>
+      <div class="chart-box"><div class="chart-title">Confidence dial trade-off</div><div id="chart-line"></div></div>
+      <div class="chart-box"><div class="chart-title">Submission vs. holdout</div><div id="chart-groupedbar"></div></div>
+    </div>
+  </div>
+
   <div class="cta-wrap">
     <a class="cta-btn" href="/app">Open the simulator</a>
+    <a class="cta-btn secondary" href="/story">Watch the Story world</a>
+    <a class="cta-btn secondary" href="/live">Live Razorpay world</a>
   </div>
 </main>
 
@@ -139,6 +187,7 @@ function renderTiles(s) {
     area.innerHTML = '<div class="numbers-unavailable">Run <code>python -m scoring.score</code> to populate these live.</div>';
     return;
   }
+  const pct = x => x === null || x === undefined ? "-" : (x*100).toFixed(1) + "%";
   area.innerHTML = `
     <div class="tiles">
       <div class="tile"><div class="n">${s.payments}</div><div class="l">Payments</div></div>
@@ -146,11 +195,251 @@ function renderTiles(s) {
       <div class="tile"><div class="n">${s.human_touches}</div><div class="l">Real decisions</div></div>
       <div class="tile"><div class="n ${s.wrong_matches === 0 ? 'good' : ''}">${s.wrong_matches}</div><div class="l">Wrong matches</div></div>
     </div>
-    ${s.holdout ? `<div class="holdout-line">On a holdout set written to break it: ${(s.holdout.match_rate*100).toFixed(1)}% match rate, ${(s.holdout.precision_at_default_threshold*100).toFixed(0)}% precision, ${(s.holdout.balance_accuracy*100).toFixed(0)}% balance accuracy.</div>` : ''}
+    <div class="tiles">
+      <div class="tile"><div class="n">${pct(s.precision)}</div><div class="l">Precision</div></div>
+      <div class="tile"><div class="n">${pct(s.recall)}</div><div class="l">Recall</div></div>
+      <div class="tile"><div class="n">${pct(s.f1)}</div><div class="l">F1</div></div>
+      <div class="tile"><div class="n">${s.true_positives}/${s.false_positives}/${s.false_negatives}</div><div class="l">TP / FP / FN</div></div>
+    </div>
+    ${s.holdout ? `<div class="holdout-line">On a holdout set written to break it: ${pct(s.holdout.match_rate)} match rate, ${pct(s.holdout.precision)} precision, ${pct(s.holdout.recall)} recall, ${pct(s.holdout.f1)} F1, ${pct(s.holdout.balance_accuracy)} balance accuracy (TP=${s.holdout.true_positives} FP=${s.holdout.false_positives} FN=${s.holdout.false_negatives}).</div>` : ''}
   `;
 }
 
-fetch("/report_summary").then(r => r.json()).then(renderTiles).catch(() => {
+/* ==================== Charts (Section 4) ====================
+   Hand-rolled inline SVG, no dependencies -- see the dataviz skill.
+   Colors are the page's own --blue/--accent2/... custom properties
+   (validated categorical order) and --good/--warning/--critical
+   (reserved status colors, used only for genuinely status-shaped data:
+   the outcome-split donut). Text always stays in text tokens -- colored
+   fills carry identity, never colored text -- three of the six
+   categorical slots (aqua/yellow/magenta) sit under 3:1 contrast on this
+   surface by design (see palette validation), so nothing here relies on
+   reading colored text. */
+const CHART = {
+  // A dedicated data-series blue -- distinct from --blue's near-black
+  // navy (now the UI's primary/button color), so the "Auto-matched"
+  // line and "Submission" bars stay legible against black axis text.
+  blue: "#2F5D8A", accent2: "#4F46E5", aqua: "#0891B2", yellow: "#CA8A04",
+  magenta: "#DB2777", violet: "#6D28D9",
+  good: "#16A34A", warning: "#D97706", critical: "#DC2626",
+  text: "#0B1E3D", text2: "#445068", muted: "#6B7A99", grid: "#E4E8F0", surface: "#ffffff",
+};
+// Fixed mapping, not re-derived from sort order each render -- color
+// follows the entity (the reason code), never its rank in the bars.
+const CODE_COLOR = {"NO-MATCH": CHART.aqua, "AMBIG-N": CHART.yellow, "SUSPENSE": CHART.magenta};
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function donutArcPath(cx, cy, rInner, rOuter, a0, a1) {
+  const large = (a1 - a0) > Math.PI ? 1 : 0;
+  const pt = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const [x0, y0] = pt(rOuter, a0), [x1, y1] = pt(rOuter, a1);
+  const [x2, y2] = pt(rInner, a1), [x3, y3] = pt(rInner, a0);
+  return `M${x0},${y0} A${rOuter},${rOuter} 0 ${large} 1 ${x1},${y1} L${x2},${y2} A${rInner},${rInner} 0 ${large} 0 ${x3},${y3} Z`;
+}
+
+function renderDonut(container, slices) {
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  const W = 220, H = 200, cx = W / 2, cy = 96, rOuter = 82, rInner = 50;
+  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": `Outcome split: ${slices.map(s => s.label + " " + s.value).join(", ")}`});
+  const gapRad = 0.03;
+  let angle = -Math.PI / 2;
+  slices.forEach(s => {
+    if (!total || !s.value) return;
+    const frac = s.value / total;
+    const a0 = angle + gapRad / 2, a1 = angle + frac * 2 * Math.PI - gapRad / 2;
+    angle += frac * 2 * Math.PI;
+    if (a1 <= a0) return;
+    const arc = svgEl("path", {d: donutArcPath(cx, cy, rInner, rOuter, a0, a1), fill: s.color});
+    const title = svgEl("title", {});
+    title.textContent = `${s.label}: ${s.value} (${(frac * 100).toFixed(1)}%)`;
+    arc.appendChild(title);
+    svg.appendChild(arc);
+  });
+  const centerN = svgEl("text", {x: cx, y: cy - 2, "text-anchor": "middle", "font-size": "24",
+    "font-weight": "700", fill: CHART.text, "font-family": "inherit"});
+  centerN.textContent = total;
+  const centerL = svgEl("text", {x: cx, y: cy + 16, "text-anchor": "middle", "font-size": "10.5",
+    fill: CHART.muted, "font-family": "inherit"});
+  centerL.textContent = "payments";
+  svg.appendChild(centerN);
+  svg.appendChild(centerL);
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = slices.map(s => `<span class="chart-legend-item"><span class="chart-swatch" style="background:${s.color}"></span>${s.label} (${s.value})</span>`).join("");
+
+  container.innerHTML = "";
+  container.appendChild(svg);
+  container.appendChild(legend);
+}
+
+function renderHBar(container, rows, valueFmt) {
+  if (!rows.length) { container.innerHTML = '<div class="chart-empty">No exceptions.</div>'; return; }
+  const W = 320, barH = 20, gap = 12, leftPad = 78, rightPad = 56, topPad = 4;
+  const H = rows.length * (barH + gap) - gap + topPad * 2;
+  const maxVal = Math.max(...rows.map(r => Math.abs(r.value_paise)), 1);
+  const plotW = W - leftPad - rightPad;
+  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": "Exception value by reason code"});
+  rows.forEach((r, i) => {
+    const y = topPad + i * (barH + gap);
+    const color = CODE_COLOR[r.code] || CHART.violet;
+    const w = Math.max(2, (Math.abs(r.value_paise) / maxVal) * plotW);
+    const label = svgEl("text", {x: leftPad - 8, y: y + barH / 2 + 4, "text-anchor": "end",
+      "font-size": "11", fill: CHART.text2, "font-family": "inherit"});
+    label.textContent = r.code;
+    const bar = svgEl("rect", {x: leftPad, y, width: w, height: barH, rx: 4, fill: color});
+    const title = svgEl("title", {});
+    title.textContent = `${r.code}: ${valueFmt(r.value_paise)}`;
+    bar.appendChild(title);
+    const valLabel = svgEl("text", {x: leftPad + w + 6, y: y + barH / 2 + 4,
+      "font-size": "11", fill: CHART.text, "font-family": "inherit"});
+    valLabel.textContent = valueFmt(r.value_paise);
+    svg.appendChild(label);
+    svg.appendChild(bar);
+    svg.appendChild(valLabel);
+  });
+  container.innerHTML = "";
+  container.appendChild(svg);
+}
+
+function renderLine(container, curve, defaultThreshold) {
+  const W = 320, H = 200, padL = 30, padR = 8, padT = 10, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxY = Math.max(...curve.map(c => Math.max(c.auto_matched, c.human_touches)), 1);
+  const xScale = t => padL + (t / 100) * plotW;
+  const yScale = v => padT + plotH - (v / maxY) * plotH;
+  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": "Confidence dial trade-off"});
+
+  for (let i = 0; i <= 3; i++) {
+    const v = Math.round((maxY / 3) * i), y = yScale(v);
+    svg.appendChild(svgEl("line", {x1: padL, x2: W - padR, y1: y, y2: y, stroke: CHART.grid, "stroke-width": 1}));
+    const t = svgEl("text", {x: padL - 5, y: y + 3, "text-anchor": "end", "font-size": "9.5", fill: CHART.muted, "font-family": "inherit"});
+    t.textContent = v;
+    svg.appendChild(t);
+  }
+  [0, 50, 100].forEach(t => {
+    const lbl = svgEl("text", {x: xScale(t), y: H - padB + 13, "text-anchor": "middle", "font-size": "9.5", fill: CHART.muted, "font-family": "inherit"});
+    lbl.textContent = t;
+    svg.appendChild(lbl);
+  });
+
+  const seriesDefs = [
+    {key: "auto_matched", color: CHART.blue, label: "Auto-matched"},
+    {key: "human_touches", color: CHART.accent2, label: "Human touches"},
+  ];
+  seriesDefs.forEach(s => {
+    const d = curve.map((c, i) => `${i === 0 ? "M" : "L"}${xScale(c.threshold)},${yScale(c[s.key])}`).join(" ");
+    svg.appendChild(svgEl("path", {d, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round"}));
+    const last = curve[curve.length - 1];
+    const dot = svgEl("circle", {cx: xScale(last.threshold), cy: yScale(last[s.key]), r: 4,
+      fill: s.color, stroke: CHART.surface, "stroke-width": 2});
+    const title = svgEl("title", {});
+    title.textContent = `${s.label} at threshold ${last.threshold}: ${last[s.key]}`;
+    dot.appendChild(title);
+    svg.appendChild(dot);
+  });
+
+  const dialX = xScale(defaultThreshold);
+  svg.appendChild(svgEl("line", {x1: dialX, x2: dialX, y1: padT, y2: H - padB, stroke: CHART.text2,
+    "stroke-width": 1, "stroke-dasharray": "3,3"}));
+  const dialLbl = svgEl("text", {x: dialX, y: padT - 2, "text-anchor": "middle", "font-size": "9.5",
+    fill: CHART.text2, "font-family": "inherit"});
+  dialLbl.textContent = `dial ${defaultThreshold}`;
+  svg.appendChild(dialLbl);
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = seriesDefs.map(s => `<span class="chart-legend-item"><span class="chart-swatch" style="background:${s.color}"></span>${s.label}</span>`).join("");
+
+  container.innerHTML = "";
+  container.appendChild(svg);
+  container.appendChild(legend);
+}
+
+function renderGroupedBar(container, metrics, submission, holdout) {
+  const W = 320, H = 200, padL = 30, padR = 6, padT = 10, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const groupW = plotW / metrics.length;
+  const barW = Math.min(24, groupW / 2 - 6);
+  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": "Submission vs holdout: match rate, precision, recall"});
+
+  [0, 0.5, 1].forEach(f => {
+    const y = padT + plotH - f * plotH;
+    svg.appendChild(svgEl("line", {x1: padL, x2: W - padR, y1: y, y2: y, stroke: CHART.grid, "stroke-width": 1}));
+    const t = svgEl("text", {x: padL - 5, y: y + 3, "text-anchor": "end", "font-size": "9.5", fill: CHART.muted, "font-family": "inherit"});
+    t.textContent = Math.round(f * 100) + "%";
+    svg.appendChild(t);
+  });
+
+  metrics.forEach((m, i) => {
+    const groupX = padL + i * groupW;
+    const subVal = submission[m.key] ?? 0;
+    const holdVal = holdout ? (holdout[m.key] ?? 0) : 0;
+    const subX = groupX + groupW / 2 - barW - 2;
+    const holdX = groupX + groupW / 2 + 2;
+
+    const subBar = svgEl("rect", {x: subX, y: padT + plotH - subVal * plotH, width: barW,
+      height: subVal * plotH, rx: 4, fill: CHART.blue});
+    const subTitle = svgEl("title", {});
+    subTitle.textContent = `Submission ${m.label}: ${(subVal * 100).toFixed(1)}%`;
+    subBar.appendChild(subTitle);
+    svg.appendChild(subBar);
+
+    if (holdout) {
+      const holdBar = svgEl("rect", {x: holdX, y: padT + plotH - holdVal * plotH, width: barW,
+        height: holdVal * plotH, rx: 4, fill: CHART.accent2});
+      const holdTitle = svgEl("title", {});
+      holdTitle.textContent = `Holdout ${m.label}: ${(holdVal * 100).toFixed(1)}%`;
+      holdBar.appendChild(holdTitle);
+      svg.appendChild(holdBar);
+    }
+
+    const lbl = svgEl("text", {x: groupX + groupW / 2, y: H - padB + 14, "text-anchor": "middle",
+      "font-size": "10", fill: CHART.text2, "font-family": "inherit"});
+    lbl.textContent = m.label;
+    svg.appendChild(lbl);
+  });
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = `<span class="chart-legend-item"><span class="chart-swatch" style="background:${CHART.blue}"></span>Submission</span>` +
+    (holdout ? `<span class="chart-legend-item"><span class="chart-swatch" style="background:${CHART.accent2}"></span>Holdout</span>` : "");
+
+  container.innerHTML = "";
+  container.appendChild(svg);
+  container.appendChild(legend);
+}
+
+function renderCharts(s) {
+  if (!s.available) {
+    ["chart-donut", "chart-hbar", "chart-line", "chart-groupedbar"].forEach(id => {
+      document.getElementById(id).innerHTML = '<div class="chart-empty">No data yet.</div>';
+    });
+    return;
+  }
+  renderDonut(document.getElementById("chart-donut"), [
+    {label: "Auto-posted", value: s.buckets.auto_posted, color: CHART.good},
+    {label: "Needs confirmation", value: s.buckets.needs_confirmation, color: CHART.warning},
+    {label: "Exceptions", value: s.buckets.exceptions, color: CHART.critical},
+  ]);
+  renderHBar(document.getElementById("chart-hbar"), s.exception_by_code, rupees);
+  renderLine(document.getElementById("chart-line"), s.threshold_curve, s.default_threshold);
+  renderGroupedBar(document.getElementById("chart-groupedbar"),
+    [{key: "match_rate", label: "Match rate"}, {key: "precision", label: "Precision"}, {key: "recall", label: "Recall"}],
+    s, s.holdout);
+}
+
+fetch("/report_summary").then(r => r.json()).then(s => { renderTiles(s); renderCharts(s); }).catch(() => {
   document.getElementById("tiles-area").innerHTML =
     '<div class="numbers-unavailable">Could not load live numbers.</div>';
 });

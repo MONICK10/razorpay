@@ -1,4 +1,4 @@
-# AI Finance Controller
+# Tally
 
 **Razorpay Buildathon &middot; Track 04**
 
@@ -228,7 +228,46 @@ report/generate_report.py   Phase 5: static HTML dashboard (no Next.js/build ste
                        out/results_holdout.json exists
 simulator/           interactive decision-trace demo (FastAPI + vanilla JS) --
                        same engine.pipeline.resolve_payment() call as batch mode;
-                       run with `python -m simulator`
+                       run with `python -m simulator`. /app is an arrival
+                       screen ("64 payments received from Razorpay") that,
+                       on "Process these payments", steps through the real
+                       64-payment submission dataset one payment at a time
+                       -- 13 of the 64 reordered to the front and narrated
+                       (see batch_seed.py), the remaining 51 shown at full
+                       technical trace detail. Charts and a "summary by
+                       case type" table stay hidden until all 64 have run.
+                       /story is the separate 13-payment KFG Snacks Store
+                       walkthrough described below. The Live Razorpay lane
+                       (webhook + real test-mode payments) still runs
+                       server-side -- see "Live Razorpay lane" below --
+                       it just has no tab in /app any more
+  batch_seed.py        the 13 real submission payments (by payment_id)
+                       reordered to the front of /app's walkthrough, plus
+                       their narration. Presentation only -- the reorder
+                       never changes a reason code; verified by running
+                       the real engine both ways in
+                       tests/test_batch_reorder.py
+  live_seed.py, webhook.py   the Live world's seed data and the pure
+                       signature-verification/payload-mapping functions
+                       behind POST /webhook/razorpay (see "Live Razorpay
+                       lane" below)
+  story_seed.py        the Story world: a fixed 13-payment day at "KFG
+                       Snacks Store" at /story. A single-screen walkthrough
+                       (1920x1080, no scrolling) in plain English for a
+                       short screen recording. The whole day is played
+                       through the real engine once at start-up and frozen
+                       into 14 frames; Next / Previous / clicking a payment
+                       / arrow keys just navigate those frames (never
+                       re-run the engine), so every panel shows the state
+                       as it was AT THAT POINT. Left: the 13 payments;
+                       centre: the current one, verdict badge first, then
+                       how it decided; right: 1 sorted / 2 not sorted /
+                       3 what we're doing (with the drafted customer
+                       message). Plus a By-hand vs With-the-app toggle.
+                       Every outcome verified against the real engine by
+                       tests/test_story_world.py, not asserted by hand
+scripts/create_payment_link.py   creates a Razorpay test-mode Payment
+                       Link for a seeded Live invoice
 tests/               pytest: reference repair, customer-status rollup,
   accounting-integrity (CASH vs ADJUSTMENT), the re-queue mechanism (both
   a standalone scenario and the submission run itself), end-to-end
@@ -256,16 +295,135 @@ python -m scoring.score --suffix _holdout
 python -m scoring.compare
 
 # Interactive simulator (decision trace, play mode, actions, before/after toggle)
-python -m simulator      # http://127.0.0.1:8000
+python -m simulator      # http://127.0.0.1:8000  (Story world at /story)
+
+# Live Razorpay lane (optional, needs .env -- see "Live Razorpay lane" below)
+python -m scripts.create_payment_link
 ```
 
-The AI layer runs against `claude-opus-5` when `ANTHROPIC_API_KEY` (or
-another SDK-recognized credential) is present, and falls back to a
-deterministic heuristic otherwise -- reference normalization/fuzzy-match
-for repair, and a "never override a dispute" rule for shortlist choice.
-Both paths are held to the same contract: return an answer or return
-`None`, never a guess. A transient API error also falls back to the
-stub rather than crashing the pipeline.
+The AI layer runs against a real model when credentials are present, and
+falls back to a deterministic heuristic otherwise -- reference
+normalization/fuzzy-match for repair, and a "never override a dispute"
+rule for shortlist choice. Both paths are held to the same contract:
+return an answer or return `None`, never a guess. A transient API error
+also falls back to the stub rather than crashing the pipeline.
+
+Provider is configured via `.env` (see `engine/ai_client.py`), never
+hardcoded:
+
+```
+LLM_PROVIDER=anthropic   # anthropic | openai | xai
+LLM_API_KEY=sk-...
+LLM_MODEL=claude-opus-5  # required for openai/xai; defaults for anthropic
+```
+
+xAI's API is OpenAI-compatible (same request shape), so both go through
+the `openai` SDK, xai only overriding the base URL. Legacy
+`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` still work with no other
+config, for anyone who already had those set. With nothing configured,
+every AI-backed call site (L3 reference repair/shortlist, L6 action
+drafting, Ask the Ledger, Explain this refusal) runs its stub instead --
+this is the state the committed `out/results*.json` were scored in.
+
+## Live Razorpay lane
+
+A third world in the simulator, alongside Demo and Batch: real Razorpay
+test-mode payments, verified and routed through the exact same
+`resolve_payment()` as everything else. Hidden entirely (no tab, and
+`POST /webhook/razorpay` 404s) unless all three of `RAZORPAY_KEY_ID`,
+`RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` are set in `.env` --
+the repo runs normally with none of this configured.
+
+**1. Test-mode keys.** Sign up at [razorpay.com](https://razorpay.com),
+switch to **Test Mode**, and grab `Key ID` / `Key Secret` from
+Settings -> API Keys. Put them in `.env`:
+
+```
+RAZORPAY_KEY_ID=rzp_test_...
+RAZORPAY_KEY_SECRET=...
+```
+
+**2. A public URL for the webhook.** Razorpay needs to reach your local
+server, so tunnel port 8000 with a Cloudflare quick tunnel -- no account,
+no signup, and the binary comes straight from Cloudflare (antivirus
+tends to leave it alone, unlike the ngrok download).
+
+Install once (Windows):
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+winget installs to `C:\Program Files (x86)\cloudflared\cloudflared.exe`
+but usually does **not** add it to PATH. Copy the exe into the project
+folder so `.\cloudflared` just works:
+
+```powershell
+Copy-Item "C:\Program Files (x86)\cloudflared\cloudflared.exe" -Destination E:\razorpay\cloudflared.exe
+.\cloudflared --version
+```
+
+Start your app first (`python -m simulator`, in its own window), then
+in a second window run the tunnel:
+
+```powershell
+.\cloudflared tunnel --url http://localhost:8000 --no-autoupdate
+```
+
+It prints a line like:
+
+```
+https://<random-words>.trycloudflare.com
+```
+
+Leave that window open -- the URL is live only while the command runs,
+and you get a fresh random URL every restart (so re-register the webhook
+in Razorpay each time you restart the tunnel).
+
+**3. Register the webhook.** In the Razorpay dashboard: Settings ->
+Webhooks -> Add New Webhook.
+- URL: `https://<random-words>.trycloudflare.com/webhook/razorpay`
+- Active events: `payment.captured` (and/or `payment_link.paid`)
+- Set a secret, and put the same value in `.env`:
+
+```
+RAZORPAY_WEBHOOK_SECRET=whsec_...
+```
+
+**4. Run it.**
+
+```bash
+python -m simulator                                        # http://127.0.0.1:8000/app
+python -m scripts.create_payment_link                       # link for LIVE-INV-01's exact amount
+python -m scripts.create_payment_link --invoice LIVE-INV-03 # a different seeded invoice
+python -m scripts.create_payment_link --invoice LIVE-INV-02 --amount 12000
+                                                           # ad-hoc amount, no invoice_id -> NO-MATCH
+```
+
+Open the printed URL, complete a test checkout (Razorpay's test cards/UPI
+are documented in their test-mode docs), and check `GET /live/state`
+(no tab in /app shows this any more, but the endpoint still runs and
+updates live). The payment link's `notes` (virtual_account / invoice_id / payer_name, see
+`scripts/create_payment_link.py`) are what let `simulator/webhook.py` map
+the payload back to one of `simulator/live_seed.py`'s four seeded
+invoices, since Payment Links have no bank-narration equivalent of their
+own.
+
+`--amount RUPEES` overrides the link amount and drops `invoice_id` from
+`notes` -- the link is then for an arbitrary sum, not a specific bill.
+`--invoice` still selects *whose* payment it is (via virtual_account /
+payer_name). Pay `--invoice LIVE-INV-02 --amount 12000` and the engine
+identifies Test Buyer One but finds no open invoice at Rs 12,000 and no
+combination that sums to it, so the payment is parked in the exception
+queue as **NO-MATCH** rather than guessed at -- the "refuses to guess"
+case, visible in `GET /live/state`.
+
+Every webhook delivery -- valid, invalid, or a Razorpay retry of one
+already processed -- is logged to `out/live_webhook_log.jsonl` for
+tracing. Deliveries are idempotent on Razorpay's payment id, and the
+signature (`X-Razorpay-Signature`, HMAC-SHA256 over the raw request body)
+is checked before any JSON parsing; an unsigned or mis-signed request
+gets a 400, never processed.
 
 ## Design principle
 

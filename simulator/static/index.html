@@ -2,457 +2,628 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AI Finance Controller — Simulator</title>
+<title>Tally &mdash; process a batch</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap">
 <style>
   :root {
-    --surface: #fcfcfb; --page: #f2f2ef; --text: #0b0b0b; --text2: #52514e;
-    --muted: #898781; --grid: #e1e0d9; --border: #d8d7cf;
-    --good: #0ca30c; --warning: #c98600; --critical: #d03b3b; --blue: #2a78d6;
+    /* Background palette: deep blue + orange + white, all three doing
+       real visual work -- the arrival hero band is deep blue, CTAs and
+       the wordmark are orange/deep-blue, the body is white. */
+    --surface: #ffffff; --page: #ffffff; --text: #14213D; --text2: #44506B;
+    --muted: #6B7A99; --grid: #E4E8F0; --border: #E4E8F0;
+    --good: #16A34A; --warn: #D97706; --bad: #DC2626;
+    --deep-blue: #123B7A; --deep-blue-dark: #0C2C5C;
+    --blue: #123B7A; --blue-hover: #0E2F61;
+    --accent: #F97316; --accent-hover: #EA580C;
+    --good-bg: #F0FDF4; --warn-bg: #FFFBEB; --bad-bg: #FEF2F2;
+    --blue-bg: #EEF2F8; --blue-border: #C7D2E0;
+    --font-display: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0; background: var(--page); color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 14px;
+    font-size: 15px; line-height: 1.5;
   }
-  header {
-    display: flex; align-items: center; gap: 24px; padding: 14px 20px;
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 10; flex-wrap: wrap;
-  }
-  header h1 { font-size: 15px; margin: 0; white-space: nowrap; }
-  header .tagline { color: var(--muted); font-size: 12px; margin-right: auto; }
-  .dial-box { display: flex; align-items: center; gap: 10px; }
-  .dial-box label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; }
-  .dial-box input[type=range] { width: 160px; }
-  .dial-value { font-family: var(--mono); font-weight: 600; min-width: 28px; display: inline-block; }
-  .kpi-strip { display: flex; gap: 14px; }
-  .kpi { text-align: right; }
-  .kpi .n { font-family: var(--mono); font-weight: 600; font-size: 15px; }
-  .kpi .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-  .kpi.highlight .n { color: var(--blue); }
-  button.reset-btn {
-    background: none; border: 1px solid var(--border); border-radius: 6px;
-    padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--text2);
-  }
-  button.reset-btn:hover { border-color: var(--critical); color: var(--critical); }
+  h2 { font-size: 14.5px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--text2); margin: 0 0 8px; }
+  b { font-weight: 650; }
+  code { font-family: var(--mono); background: var(--page); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; font-size: 14.5px; }
+  button { font: inherit; cursor: pointer; }
 
-  main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; transition: margin-right .2s ease; }
-  body.ideas-open main { margin-right: 356px; }
-
-  /* -- toggle bar + comparison strip (Upgrade 3) -------------------- */
-  .toggle-bar {
-    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 16px;
+  /* ================= Arrival screen: full-bleed deep-blue hero band,
+     large centered "Tally" + caption, above the white card ============ */
+  #arrival { min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+  .arrival-hero {
+    width: 100%; background: linear-gradient(160deg, var(--deep-blue) 0%, var(--deep-blue-dark) 100%);
+    padding: 56px 24px 44px; text-align: center;
   }
-  .mode-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
-  .mode-toggle button {
-    border: none; background: none; padding: 6px 14px; border-radius: 999px;
-    font-size: 12.5px; cursor: pointer; color: var(--text2); font-weight: 500;
+  .arrival-hero h1 {
+    font-family: var(--font-display); font-weight: 800; color: #ffffff;
+    font-size: 52px; margin: 0 0 12px; letter-spacing: -.02em; line-height: 1;
   }
-  .mode-toggle button.active { background: var(--text); color: var(--surface); }
-  .comparison { display: flex; gap: 22px; margin-left: auto; flex-wrap: wrap; }
-  .comparison .col { text-align: center; min-width: 90px; }
-  .comparison .col-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
-  .comparison .row { display: flex; gap: 16px; font-family: var(--mono); font-size: 13px; }
-  .comparison .row .without { color: var(--critical); }
-  .comparison .row .with { color: var(--good); font-weight: 600; }
-  .comparison .metric-label { font-size: 10px; color: var(--muted); }
-
-  /* -- play mode bar (Upgrade 2) ------------------------------------- */
-  .play-bar {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 16px;
+  .arrival-hero .arrival-caption { font-size: 17px; color: #D7E2FA; margin: 0; }
+  #arrival-body { flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+    padding: 40px 16px; width: 100%; }
+  .arrival-card {
+    max-width: 640px; width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 40px 44px; box-shadow: 0 1px 3px rgba(15,23,42,.06);
   }
-  .world-badge {
-    font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 999px;
-    border: 1px solid var(--blue); color: var(--blue);
+  .arrival-headline { font-size: 23px; font-weight: 700; margin: 0 0 8px; }
+  .arrival-sub { font-size: 15px; color: var(--text2); margin: 0 0 24px; }
+  .arrival-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+  .astat {
+    background: var(--page); border: 1px solid var(--grid); border-radius: 10px; padding: 14px 16px;
   }
-  .play-btn {
-    border: none; border-radius: 6px; padding: 7px 14px; font-size: 12.5px;
-    font-weight: 600; cursor: pointer; background: var(--good); color: white;
+  .astat .an { font-family: var(--mono); font-weight: 700; font-size: 20px; }
+  .astat .al { font-size: 13.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 3px; }
+  .arrival-note { font-size: 14.5px; color: var(--muted); margin: 0 0 26px; }
+  .process-btn {
+    display: block; width: 100%; border: none; background: var(--accent); color: white;
+    font-size: 17px; font-weight: 700; padding: 16px; border-radius: 9px;
+    box-shadow: 0 1px 2px rgba(249,115,22,.2), 0 4px 10px rgba(249,115,22,.25);
+    transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
   }
-  .play-btn.pause { background: var(--warning); }
-  .play-btn:disabled { opacity: .5; cursor: default; }
-  .speed-box { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); }
-  .speed-box input[type=range] { width: 110px; }
-  .play-progress { font-family: var(--mono); font-size: 12px; color: var(--text2); margin-left: auto; }
-  .progress-bar { width: 140px; height: 5px; background: var(--grid); border-radius: 3px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; background: var(--blue); width: 0%; transition: width .15s linear; }
-
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px;
+  .process-btn:hover { opacity: .94; transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(249,115,22,.25), 0 8px 18px rgba(249,115,22,.3); }
+  .process-btn:active { transform: translateY(0); }
+  .upload-toggle {
+    display: block; margin: 18px auto 0; border: none; background: none; color: var(--blue);
+    font-size: 15.5px; font-weight: 600; text-decoration: underline; padding: 4px;
   }
-  .top-grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
-  h2 {
-    font-size: 11px; margin: 0 0 10px; color: var(--text2); text-transform: uppercase;
-    letter-spacing: .05em; font-weight: 600;
-  }
-  .h2-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
-  .h2-row h2 { margin: 0; }
-  .field { margin-bottom: 10px; }
-  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
-  .field input, .field select {
-    width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px;
-    font-size: 13px; font-family: var(--mono); background: var(--page); color: var(--text);
-  }
-  .submit-btn {
-    width: 100%; padding: 9px; border: none; border-radius: 6px; background: var(--blue);
-    color: white; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 4px;
-  }
-  .submit-btn:hover { opacity: .9; }
-
-  /* -- scenario library (replaces presets) ----------------------------- */
-  .run-all-btn {
-    border: 1px solid var(--blue); color: var(--blue); background: none; border-radius: 999px;
-    padding: 4px 10px; font-size: 10.5px; cursor: pointer; font-weight: 600; white-space: nowrap;
-  }
-  .run-all-btn:hover { background: var(--blue); color: white; }
-  .run-all-btn:disabled { opacity: .5; cursor: default; background: none; color: var(--text2); border-color: var(--border); }
-  .scenario-list { display: flex; flex-direction: column; gap: 5px; }
-  .scenario-item {
-    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-    border: 1px solid var(--border); background: var(--page); border-radius: 8px;
-    padding: 7px 9px; cursor: pointer; font-family: inherit; color: var(--text);
-  }
-  .scenario-item:hover:not(:disabled) { border-color: var(--blue); }
-  .scenario-item:disabled { opacity: .45; cursor: not-allowed; }
-  .scenario-item.active { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, var(--page)); }
-  .scenario-num {
-    flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--border);
-    color: var(--text2); font-size: 10px; font-weight: 700; display: flex;
-    align-items: center; justify-content: center; font-family: var(--mono);
-  }
-  .scenario-title { flex: 1; font-size: 12px; line-height: 1.3; }
-  .scenario-lock { font-size: 13px; color: var(--muted); flex: none; }
-  .scenario-code {
-    flex: none; font-family: var(--mono); font-size: 9.5px; color: var(--muted);
-    border: 1px solid var(--grid); border-radius: 5px; padding: 1px 5px;
-  }
-
-  /* -- story banner ------------------------------------------------------ */
-  .story-banner {
-    display: none; border: 1.5px solid var(--blue); border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 12px;
-    background: color-mix(in srgb, var(--blue) 6%, var(--surface));
-  }
-  .story-title { font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
-  .story-text { font-size: 13px; color: var(--text2); font-style: italic; margin-bottom: 6px; }
-  .story-watch { font-size: 12px; color: var(--text); }
-  .story-watch b { color: var(--blue); }
-
-  .trace-panel { min-height: 320px; }
-  .trace-empty { color: var(--muted); font-size: 13px; padding: 40px 0; text-align: center; }
-  .trace-step {
-    display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--grid);
-    opacity: 0; transform: translateY(4px); animation: reveal .25s ease forwards;
-  }
-  .trace-step:last-child { border-bottom: none; }
-  @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
-  .trace-icon {
-    flex: none; width: 20px; height: 20px; border-radius: 50%; display: flex;
-    align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
-    margin-top: 1px;
-  }
-  .trace-icon.PASS { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
-  .trace-icon.FAIL { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
-  .trace-icon.SKIP { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
-  .trace-body .layer { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .03em; color: var(--text2); }
-  .trace-body .plain-line { font-size: 13.5px; font-weight: 600; margin: 3px 0 2px; color: var(--text); }
-  .trace-body .note { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
-  .trace-body .checks { list-style: none; margin: 0; padding: 0; }
-  .trace-body .checks li { font-size: 11.5px; color: var(--muted); padding: 1px 0; }
-  .trace-body .checks li.passed::before { content: "✓ "; color: var(--good); }
-  .trace-body .checks li.failed::before { content: "✗ "; color: var(--critical); }
-  .trace-outcome {
-    font-size: 11px; font-family: var(--mono); font-weight: 700; padding: 2px 8px;
-    border-radius: 999px; align-self: flex-start; margin-left: auto; flex: none;
-  }
-  .trace-outcome.PASS { color: var(--good); border: 1px solid var(--good); }
-  .trace-outcome.FAIL { color: var(--critical); border: 1px solid var(--critical); }
-  .trace-outcome.SKIP { color: var(--muted); border: 1px solid var(--muted); }
-  .trace-result {
-    margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13px;
-    border: 1.5px solid var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent);
-  }
-  .trace-result.exception { border-color: var(--critical); background: color-mix(in srgb, var(--critical) 8%, transparent); }
-  .trace-result b { font-family: var(--mono); }
-  .trace-result-plain { font-size: 15.5px; font-weight: 600; line-height: 1.4; color: var(--text); margin-bottom: 8px; }
-
-  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-  .stack-card { margin-top: 16px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th { text-align: left; font-size: 10px; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--grid); }
-  td { padding: 6px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; vertical-align: top; }
-  td.num { text-align: right; font-family: var(--mono); }
-  td.mono { font-family: var(--mono); }
-  .pill { font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
-  .pill.good { color: var(--good); border-color: var(--good); }
-  .pill.bad { color: var(--critical); border-color: var(--critical); }
-  .pill.pending { color: var(--warning); border-color: var(--warning); }
-  .pill.neutral { color: var(--blue); border-color: var(--blue); }
-  .empty-row td { color: var(--muted); text-align: center; padding: 16px; }
-
-  /* -- plain-English hover/click tooltips ------------------------------ */
-  .tip { position: relative; cursor: help; }
-  span.tip, .l.tip { border-bottom: 1px dotted var(--muted); }
-  .tip::after {
-    content: attr(data-tip); position: absolute; top: 130%; left: 50%; transform: translateX(-50%);
-    background: var(--text); color: var(--surface); padding: 7px 10px; border-radius: 7px;
-    font-size: 11.5px; font-weight: 400; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    line-height: 1.4; text-align: left; white-space: normal; width: max-content; max-width: 230px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.22); opacity: 0; visibility: hidden; pointer-events: none;
-    transition: opacity .12s ease; z-index: 200;
-  }
-  .tip:hover::after, .tip.tip-open::after { opacity: 1; visibility: visible; }
-
-  /* -- actions card (Upgrade 1) --------------------------------------- */
-  .action-note { max-width: 360px; }
-  details.draft-details summary {
-    cursor: pointer; font-size: 12px; color: var(--text2); list-style: none;
-  }
-  details.draft-details summary::-webkit-details-marker { display: none; }
-  details.draft-details summary::before { content: "▸ "; color: var(--muted); }
-  details.draft-details[open] summary::before { content: "▾ "; }
-  .draft-text {
-    white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; margin: 8px 0 0;
-    padding: 10px; background: var(--page); border-radius: 6px; border: 1px solid var(--grid);
-    max-width: 420px;
-  }
-  .send-btn {
+  .upload-panel { margin-top: 16px; border-top: 1px solid var(--grid); padding-top: 18px; }
+  .upload-panel p { font-size: 14.5px; color: var(--text2); margin: 0 0 10px; }
+  .upload-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .upload-row input[type=file] { font-size: 14.5px; max-width: 220px; }
+  .upload-row button {
     border: 1px solid var(--blue); color: var(--blue); background: none; border-radius: 6px;
-    padding: 5px 12px; font-size: 11.5px; cursor: pointer; font-weight: 600; white-space: nowrap;
+    padding: 7px 13px; font-size: 14.5px; font-weight: 600;
   }
-  .send-btn:hover { background: var(--blue); color: white; }
+  .upload-row button:hover { background: var(--blue); color: white; }
+  .upload-result {
+    margin-top: 10px; font-size: 13.5px; white-space: pre-wrap; background: var(--page);
+    border: 1px solid var(--grid); border-radius: 6px; padding: 8px 10px; color: var(--text2);
+  }
 
-  /* -- raw bank statement (Upgrade 3, "without") ----------------------- */
-  #without-agent-view { display: none; }
-  .statement-note { color: var(--text2); font-size: 12.5px; margin: -2px 0 14px; }
+  /* ================= Workspace (hidden until Process is clicked) =================
+     Fixed to exactly one viewport: the workspace itself never grows as
+     payments process. Everything that can grow (paylist, decision trace,
+     the three right-hand panels) scrolls INSIDE its own box instead --
+     see .paylist/.centre-detail/.panel .pbody below. The page can still
+     scroll past this block to reach #below-day once processing finishes;
+     only the workspace's own height is pinned. */
+  #workspace-wrap { display: none; }
+  #workspace-wrap.on { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-  .invoices-card { margin-top: 16px; }
+  .topstrip {
+    flex: 0 0 auto;
+    background: linear-gradient(160deg, var(--deep-blue) 0%, var(--deep-blue-dark) 100%);
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .trow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .brand { font-family: var(--font-display); font-size: 26px; font-weight: 800;
+    white-space: nowrap; color: var(--accent); letter-spacing: -.01em; }
+  .brand span { font-weight: 400; color: #B9C9EA; font-size: 15.5px; }
+  .counters { display: flex; gap: 18px; font-size: 14.5px; color: #E8EEFA; }
+  .counters .c b { font-family: var(--mono); font-size: 15px; }
+  .counters .c.done b { color: #4ADE80; }
+  .counters .c.check b { color: #FBBF24; }
+  .counters .c.held b { color: #F87171; }
+  .progress { margin-left: auto; font-size: 14.5px; color: #B9C9EA; font-family: var(--mono); }
 
-  #toasts { position: fixed; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
-  .toast {
-    background: var(--text); color: var(--surface); padding: 10px 14px; border-radius: 8px;
-    font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,.2); animation: toast-in .2s ease;
-    font-family: var(--mono);
+  .workspace {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; grid-template-columns: 280px minmax(0, 1fr) 560px;
+    gap: 12px; padding: 12px 16px;
   }
-  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  .row-flash { animation: flash 1s ease; }
-  @keyframes flash { 0%,100% { background: transparent; } 30% { background: color-mix(in srgb, var(--blue) 20%, transparent); } }
+  .col { min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.05);
+  }
 
-  /* -- Seven Ideas panel (Upgrade B) ----------------------------------- */
-  .ideas-tab {
-    position: fixed; top: 90px; right: 0; z-index: 8;
-    border: 1px solid var(--blue); border-right: none; background: var(--blue); color: white;
-    border-radius: 8px 0 0 8px; padding: 10px 8px; font-size: 12px; font-weight: 700;
-    cursor: pointer; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: .02em;
+  .controls { flex: 0 0 auto; display: flex; flex-direction: column; gap: 7px; }
+  .controls button {
+    font-size: 14.5px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface); padding: 9px 12px;
+    color: var(--text); text-align: left;
+    transition: border-color .12s ease, background .12s ease, transform .12s ease;
   }
-  body.ideas-open .ideas-tab { display: none; }
-  .ideas-panel {
-    /* starts below the sticky header (measured 61px) so it can never cover
-       the header's own controls, e.g. Reset demo */
-    position: fixed; top: 61px; right: 0; height: calc(100vh - 61px); width: 340px; z-index: 8;
-    background: var(--surface); border-left: 1px solid var(--border);
-    box-shadow: -6px 0 20px rgba(0,0,0,.10); overflow-y: auto; padding: 16px;
-    transform: translateX(100%); transition: transform .2s ease;
-  }
-  body.ideas-open .ideas-panel { transform: translateX(0); }
-  .ideas-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-  .ideas-header h2 { margin: 0; }
-  .ideas-close {
-    border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer;
-    line-height: 1; padding: 2px 6px;
-  }
-  .ideas-close:hover { color: var(--critical); }
-  .ideas-sub { font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
-  .idea-card {
-    border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px;
-    background: var(--page);
-  }
-  .idea-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-  .idea-text { font-size: 12px; color: var(--text); margin-bottom: 7px; line-height: 1.4; }
-  .idea-example, .idea-why { font-size: 11.5px; color: var(--text2); margin-bottom: 5px; line-height: 1.4; }
-  .idea-example b, .idea-why b { color: var(--text); }
-  .idea-show-btn {
-    margin-top: 4px; border: 1px solid var(--blue); color: var(--blue); background: none;
-    border-radius: 6px; padding: 5px 11px; font-size: 11.5px; cursor: pointer; font-weight: 600;
-  }
-  .idea-show-btn:hover { background: var(--blue); color: white; }
+  .controls button:hover:not(:disabled) { border-color: var(--blue); background: var(--blue-bg); }
+  .controls button.primary { background: var(--blue); color: white; border-color: var(--blue); font-weight: 600; }
+  .controls button.primary:hover:not(:disabled) { background: var(--blue-hover); border-color: var(--blue-hover); }
+  .controls button:disabled { opacity: .4; cursor: not-allowed; }
+  .stepbtns { display: flex; gap: 7px; }
+  .stepbtns button { flex: 1 1 0; text-align: center; padding: 9px 6px; }
 
-  @media (max-width: 900px) {
-    .top-grid { grid-template-columns: 1fr; }
-    .bottom-grid { grid-template-columns: 1fr; }
-    .comparison { margin-left: 0; }
-    body.ideas-open main { margin-right: 0; }
-    .ideas-panel { width: 100%; }
+  .paylist { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .paylist .prow {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-radius: 6px; font-size: 13.5px; border: 1px solid transparent; cursor: pointer;
+    transition: background .1s ease, border-color .1s ease;
   }
+  .paylist .prow:hover { background: var(--page); }
+  .paylist .prow.future { opacity: .5; }
+  .paylist .prow.endrow { border-top: 1px solid var(--grid); margin-top: 3px; padding-top: 8px;
+    font-weight: 600; color: var(--text2); }
+  .paylist .prow .num { color: var(--muted); font-family: var(--mono); width: 22px; flex: none; }
+  .paylist .prow .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .paylist .prow .amt { font-family: var(--mono); font-weight: 600; margin-left: auto; flex: none; }
+  .paylist .prow.cur { background: var(--blue-bg); border-color: var(--blue-border); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grid); flex: 0 0 auto; }
+  .dot.done { background: var(--good); }
+  .dot.check { background: var(--warn); }
+  .dot.held { background: var(--bad); }
+
+  .centre { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+  .centre-detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+  /* -- "The shops - what they still owe", above the decision trace,
+     fixed height so it never pushes the trace (or the page) taller -- */
+  .shops-wrap { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px 11px; background: var(--page); max-height: 220px; overflow: hidden;
+    display: flex; flex-direction: column; }
+  .shops-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex: 0 0 auto; }
+  .shops-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .shops-toggle {
+    margin-left: auto; font-size: 12.5px; border: 1px solid var(--blue); color: var(--blue);
+    background: none; border-radius: 999px; padding: 2px 10px; font-weight: 600;
+  }
+  .shops-toggle:hover { background: var(--blue); color: white; }
+  .shop-current { min-height: 0; overflow-y: auto; }
+  .shop-current .sh-head { font-weight: 700; font-size: 14.5px; margin-bottom: 5px; }
+  .shop-current .sh-head .acct { font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 7px; }
+  .bill-list { display: flex; flex-direction: column; }
+  /* Three columns, always: invoice id -- status -- amount. Status
+     (paid/partial/open) never replaces the amount, so a paid bill still
+     shows what it was for. */
+  .bill { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+    font-size: 13.5px; padding: 3px 4px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+  .bill .bi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bill .bs { font-family: var(--mono); font-weight: 600; text-align: right; min-width: 64px; }
+  .bill .bs.paid { color: var(--good); }
+  .bill .bs.part { color: var(--warn); }
+  .bill .ba { font-family: var(--mono); text-align: right; }
+  .bill.done { color: var(--muted); }
+  .bill.hot { background: var(--warn-bg); box-shadow: inset 0 0 0 1px #FCD34D; }
+  .shops-all { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .shops-all-row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 4px 7px;
+    border-radius: 5px; background: var(--surface); border: 1px solid var(--grid); }
+  .shops-all-row .san { font-weight: 600; }
+  .shops-all-row .saa { font-family: var(--mono); color: var(--muted); }
+  .shops-none { color: var(--muted); font-size: 13.5px; font-style: italic; padding: 4px 0; }
+  .verdict {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px solid var(--border); border-left-width: 5px; border-radius: 8px;
+    padding: 9px 13px; margin-bottom: 12px;
+  }
+  .verdict.done { border-left-color: var(--good); background: var(--good-bg); }
+  .verdict.check { border-left-color: var(--warn); background: var(--warn-bg); }
+  .verdict.held { border-left-color: var(--bad); background: var(--bad-bg); }
+  .verdict .vbadge {
+    font-family: var(--mono); font-size: 13.5px; font-weight: 700; padding: 2px 7px;
+    border-radius: 5px; background: var(--surface); border: 1px solid var(--border);
+  }
+  .verdict .vplain { font-size: 17px; font-weight: 700; }
+  .verdict .vsure { font-size: 13.5px; color: var(--text2); margin-left: auto; white-space: nowrap; }
+  .money-note { font-size: 13.5px; color: var(--muted); margin: -6px 0 10px; }
+
+  .cur-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .cur-head .amt { font-family: var(--mono); font-weight: 700; font-size: 19px; }
+  .cur-head .who { font-size: 15.5px; }
+  .cur-head .when { color: var(--muted); font-size: 13.5px; margin-left: auto; }
+  .note-line { font-family: var(--mono); font-size: 13.5px; color: var(--text2);
+    background: var(--page); border-radius: 6px; padding: 5px 8px; margin: 7px 0; }
+  .story { font-size: 15.5px; line-height: 1.5; margin: 8px 0 12px; }
+  .narrated-tag {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--blue);
+    border: 1px solid var(--blue-border); background: var(--blue-bg); border-radius: 4px;
+    padding: 1px 6px; margin-left: 6px;
+  }
+
+  .decide h2, .changed h2 { margin: 2px 0 5px; }
+  .step { display: flex; gap: 9px; padding: 4px 0; border-bottom: 1px dashed var(--grid); }
+  .step .ic { flex: 0 0 auto; width: 16px; text-align: center; font-weight: 700; }
+  .step .ic.y { color: var(--good); }
+  .step .ic.n { color: var(--warn); }
+  .step .ic.d { color: var(--muted); }
+  .step .qa .q { font-weight: 600; }
+  .step .qa .a { color: var(--text2); }
+  .changed { margin-top: 10px; }
+  .changed p { margin: 0; font-size: 14.5px; }
+  .intro-def { font-size: 14.5px; line-height: 1.55; }
+
+  /* real engine trace (payments 14-64, no hand-written narration) */
+  .tracerow { display: flex; gap: 9px; padding: 5px 0; border-bottom: 1px dashed var(--grid); }
+  .tracerow .tic {
+    flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; font-size: 12.5px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tracerow .tic.PASS { background: var(--good-bg); color: var(--good); }
+  .tracerow .tic.FAIL { background: var(--bad-bg); color: var(--bad); }
+  .tracerow .tic.SKIP { background: var(--page); color: var(--muted); }
+  .tracerow .tbody .layer { font-family: var(--mono); font-size: 12px; font-weight: 700;
+    letter-spacing: .03em; color: var(--muted); }
+  .tracerow .tbody .plain { font-size: 14.5px; font-weight: 600; margin: 2px 0 1px; }
+  .tracerow .tbody .note { font-size: 13px; color: var(--text2); }
+
+  .badge {
+    display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border);
+    color: var(--text2); background: var(--page);
+  }
+  .tag {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em;
+    border: 1px solid var(--bad); color: var(--bad); border-radius: 3px; padding: 0 3px; margin-left: 4px;
+  }
+
+  .closing p { font-size: 15px; margin: 6px 0; }
+
+  /* ---------- right column ---------- */
+  .rightcol { display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 12px; min-height: 0; }
+  .rightcol.draft-open { grid-template-rows: 1fr 1fr 2.3fr; }
+  .panel { min-height: 0; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.05); }
+  .panel .pbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+  .panel .empty { color: var(--muted); font-size: 13.5px; font-style: italic; padding: 4px 0; }
+  .panel h2 { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; flex: 0 0 auto; }
+  .panel .pcount { font-family: var(--mono); color: var(--muted); font-weight: 400;
+    text-transform: none; letter-spacing: normal; margin-left: -2px; }
+  .pnum {
+    flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%;
+    background: var(--text); color: var(--surface); font-size: 11.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .psub { font-size: 12px; color: var(--muted); margin: 0 0 7px 24px; }
+
+  @keyframes landflash {
+    0% { background: #fef3c7; }
+    70% { background: #fef3c7; }
+    100% { background: transparent; }
+  }
+  .srow.flash, .qrow.flash, .arow.flash { animation: landflash 2s ease-out; }
+
+  .srow { padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .srow.dimmed { display: none; }
+  .srow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .srow .l1 .n { font-family: var(--mono); color: var(--muted); }
+  .srow .l1 .amt { font-family: var(--mono); font-weight: 600; }
+  .srow .l1 .bills { color: var(--text2); }
+  .srow .l2 { display: flex; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+  .srow .l2 .plain { color: var(--text); }
+  .srow .sure { font-size: 12px; }
+  .srow .sure.ok { color: var(--good); }
+  .srow .sure.no { color: var(--warn); }
+  .srow .later { font-size: 11.5px; border: 1px solid var(--blue); color: var(--blue);
+    border-radius: 3px; padding: 0 3px; }
+  .srow .money { color: var(--muted); font-size: 12.5px; }
+
+  .qrow { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .qrow.dimmed { display: none; }
+  .qrow .l1 { display: flex; gap: 8px; align-items: baseline; }
+  .qrow .l1 .amt { font-family: var(--mono); font-weight: 600; }
+  .qrow .reason { color: var(--text2); margin-top: 2px; }
+  .qrow .whybtn { font: inherit; font-size: 12.5px; cursor: pointer; margin-top: 4px;
+    border: 1px solid var(--border); background: var(--page); border-radius: 5px; padding: 2px 8px; }
+  .qrow .why { margin-top: 5px; font-size: 13px; color: var(--text2);
+    background: var(--page); border-radius: 6px; padding: 6px 8px; }
+
+  .arow { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px;
+    display: flex; flex-direction: column; gap: 4px; }
+  .arow .atop { display: flex; gap: 7px; align-items: baseline; }
+  .arow.done { color: var(--muted); }
+  .arow .senttag { margin-left: auto; color: var(--good); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .seebtn { align-self: flex-start; font: inherit; font-size: 12.5px; cursor: pointer;
+    border: none; background: none; color: var(--blue); padding: 0; text-decoration: underline; }
+  .draftbox { border: 1px solid var(--border); border-radius: 6px; background: var(--page); padding: 8px 9px; }
+  .draftbox pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word; color: var(--text); }
+  .draftbtns { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .draftbtns button { font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); border-radius: 5px; padding: 2px 10px; }
+  .draftbtns .sent-note { font-size: 12.5px; color: var(--good); }
+
+  /* -- hover preview: the full drafted email, shown on hover so it can be
+     read without clicking. Used on every Send button, in the "doing
+     about it" panel and inside the chat widget. -- */
+  .hover-preview {
+    /* Must outrank the chat widget (z-index 950) -- it's appended to
+       <body>, a sibling of #chat-panel, so a lower z-index here paints
+       it underneath the panel's own stacking context even though it's
+       positioned visually on top of it. */
+    position: fixed; z-index: 1000; max-width: 360px; background: var(--text); color: var(--surface);
+    border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(15,23,42,.3);
+    pointer-events: none;
+  }
+  .hover-preview pre {
+    margin: 0; white-space: pre-wrap; word-break: break-word;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.5;
+  }
+
+  .filter-banner {
+    display: none; align-items: center; gap: 8px; background: var(--blue-bg);
+    border: 1px solid var(--blue-border); border-radius: 8px; padding: 7px 11px;
+    font-size: 13.5px; margin-bottom: 4px;
+  }
+  .filter-banner.on { display: flex; }
+  .filter-banner button { border: none; background: none; color: var(--blue); font-weight: 600;
+    text-decoration: underline; padding: 0; margin-left: auto; }
+
+  @media (max-width: 1500px) {
+    .workspace { grid-template-columns: 240px minmax(0,1fr) 440px; }
+  }
+
+  /* ================= Below the day: summary + charts (hidden until done) ================= */
+  #below-day { display: none; padding: 20px 16px 60px; max-width: 1400px; margin: 0 auto; }
+  #below-day.on { display: block; }
+  .section-title { font-size: 16px; font-weight: 700; margin: 28px 0 12px; }
+  .section-title:first-child { margin-top: 4px; }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .summary-table th { text-align: left; font-size: 11.5px; text-transform: uppercase; color: var(--muted);
+    padding: 7px 10px; border-bottom: 1px solid var(--grid); }
+  .summary-table td { padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .summary-table td.num { text-align: right; font-family: var(--mono); }
+  .summary-table tr.clickable { cursor: pointer; transition: background .1s ease; }
+  .summary-table tr.clickable:hover { background: var(--page); }
+  .summary-table tr.active-filter { background: var(--blue-bg); }
+  .summary-table .explain { color: var(--text2); }
+
+  .headline-row { display: flex; gap: 16px; margin: 14px 0 6px; flex-wrap: wrap; }
+  .headline { flex: 1 1 200px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; text-align: center; border-top-width: 4px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.05); }
+  .headline .hn { font-family: var(--mono); font-weight: 700; font-size: 30px; }
+  .headline .hl { font-size: 13.5px; color: var(--text2); margin-top: 4px; }
+  .headline.done { border-top-color: var(--good); }
+  .headline.done .hn { color: var(--good); }
+  .headline.check { border-top-color: var(--warn); }
+  .headline.check .hn { color: var(--warn); }
+  .headline.held { border-top-color: var(--bad); }
+  .headline.held .hn { color: var(--bad); }
+  .headline-sum { font-size: 13.5px; color: var(--muted); margin: 0 0 6px; }
+
+  .charts-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.05); }
+  .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-box { background: var(--page); border: 1px solid var(--grid); border-radius: 10px; padding: 14px; }
+  .chart-box-wide { padding: 18px; }
+  .chart-title { font-size: 12px; color: var(--text2); font-weight: 700; margin-bottom: 6px;
+    text-transform: uppercase; letter-spacing: .03em; }
+  .chart-box svg { display: block; overflow: visible; margin: 0 auto; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; justify-content: center; }
+  .chart-legend-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text2); }
+  .chart-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .chart-empty { font-size: 13.5px; color: var(--muted); text-align: center; padding: 24px 0; }
+  .chart-caption { font-size: 13.5px; color: var(--text2); margin-top: 10px; text-align: center; line-height: 1.4; }
+
+  /* ================= Ask the ledger: floating chat widget =================
+     Fixed/overlay positioning throughout -- it must never affect the
+     page's own layout or height, on the arrival screen or in the
+     workspace. */
+  #chat-fab {
+    position: fixed; bottom: 22px; right: 22px; z-index: 950;
+    width: 54px; height: 54px; border-radius: 50%; border: none;
+    background: var(--blue); color: white; font-size: 23px; line-height: 1;
+    box-shadow: 0 4px 16px rgba(11,30,61,.35);
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  #chat-fab:hover { transform: translateY(-2px); box-shadow: 0 6px 22px rgba(11,30,61,.42); }
+
+  #chat-panel {
+    position: fixed; bottom: 88px; right: 22px; z-index: 950;
+    width: 380px; height: 540px; max-height: calc(100vh - 110px);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 10px 36px rgba(15,23,42,.25);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #chat-panel[hidden] { display: none; }
+  .chat-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .chat-head .ch-title { font-weight: 700; font-size: 15px; }
+  .chat-readonly-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+  #chat-close { margin-left: auto; border: none; background: none; font-size: 19px;
+    line-height: 1; color: var(--muted); padding: 2px 4px; }
+  #chat-close:hover { color: var(--bad); }
+
+  .chat-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 10px; }
+  .chat-msg { max-width: 88%; padding: 8px 11px; border-radius: 10px; font-size: 14px;
+    line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .chat-msg.user { align-self: flex-end; background: var(--blue); color: white;
+    border-bottom-right-radius: 3px; }
+  .chat-msg.bot { align-self: flex-start; background: var(--page); border: 1px solid var(--grid);
+    border-bottom-left-radius: 3px; }
+  .chat-msg.thinking { color: var(--muted); font-style: italic; }
+  .chat-ai-tag { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 4px; }
+
+  .chat-chips { display: flex; flex-direction: column; gap: 7px; align-self: stretch; }
+  .chat-chips-label { font-size: 12.5px; color: var(--muted); margin-bottom: 1px; }
+  .chat-chip { align-self: flex-start; border: 1px solid var(--blue); color: var(--blue);
+    background: none; border-radius: 999px; padding: 6px 13px; font-size: 13.5px; text-align: left; }
+  .chat-chip:hover { background: var(--blue); color: white; }
+
+  .chat-input-row { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 12px;
+    border-top: 1px solid var(--border); }
+  #chat-input { flex: 1 1 auto; min-width: 0; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; font: inherit; font-size: 14px; color: var(--text); background: var(--surface); }
+  #chat-send { flex: 0 0 auto; border: none; background: var(--blue); color: white;
+    border-radius: 8px; padding: 8px 15px; font-weight: 600; font-size: 14px; }
+  #chat-send:disabled { opacity: .5; cursor: default; }
+
+  /* -- a customer answer inside a chat bubble: every bill named, in its
+     group, plus the could-not-sort section and its Send email button. -- */
+  .chat-customer { font-size: 14px; }
+  .cc-head { font-weight: 700; margin-bottom: 6px; }
+  .cc-head .cc-acct { font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 6px; }
+  .cc-group { margin-bottom: 8px; }
+  .cc-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); font-weight: 700; margin-bottom: 3px; }
+  .cc-row { padding: 2px 0; }
+  .cc-row .cc-sub { color: var(--text2); }
+  .cc-totals { margin: 6px 0; padding-top: 6px; border-top: 1px dashed var(--grid); }
+  .cc-stuck-total { margin-top: 4px; font-weight: 600; }
+  .cc-email-btn {
+    margin-top: 8px; border: 1px solid var(--blue); color: var(--blue); background: none;
+    border-radius: 6px; padding: 5px 12px; font-size: 13px; font-weight: 600;
+  }
+  .cc-email-btn:hover { background: var(--blue); color: white; }
+  .cc-email-btn.sent { border-color: var(--good); color: var(--good); background: none; cursor: default; }
 </style>
 </head>
 <body>
-<header>
-  <h1>AI Finance Controller — Simulator</h1>
-  <span class="tagline">watch the six layers decide, live</span>
-  <div class="kpi-strip">
-    <div class="kpi highlight"><div class="n" id="kpi-auto">0</div><div class="l tip" data-tip="Handled with no human involved.">Auto-matched</div></div>
-    <div class="kpi"><div class="n" id="kpi-human">0</div><div class="l tip" data-tip="Needs a person to look.">Human touch</div></div>
-    <div class="kpi"><div class="n" id="kpi-requeue">0</div><div class="l tip" data-tip="Payments we gave up on earlier, that later money made solvable.">Resolved on re-queue</div></div>
-    <div class="kpi"><div class="n" id="kpi-value">₹0</div><div class="l tip" data-tip="Total money currently sitting unresolved.">Exception value</div></div>
-  </div>
-  <div class="dial-box">
-    <label for="dial" class="tip" data-tip="How sure the app must be before applying a match on its own.">Confidence dial</label>
-    <input type="range" id="dial" min="0" max="100" step="5" value="85">
-    <span class="dial-value" id="dial-value">85</span>
-  </div>
-  <button class="reset-btn" id="reset-btn">Reset demo</button>
-</header>
 
-<main>
-  <div class="toggle-bar">
-    <div class="mode-toggle">
-      <button type="button" id="mode-with" class="active">With the agent</button>
-      <button type="button" id="mode-without">Without the agent</button>
-    </div>
-    <div class="comparison">
-      <div class="col">
-        <div class="col-label">Rows to read</div>
-        <div class="row"><span class="without" id="cmp-rows-without">0</span><span class="with" id="cmp-rows-with">0</span></div>
-      </div>
-      <div class="col">
-        <div class="col-label">Decisions needed</div>
-        <div class="row"><span class="without" id="cmp-dec-without">0</span><span class="with" id="cmp-dec-with">0</span></div>
-      </div>
-      <div class="col">
-        <div class="col-label">Est. time</div>
-        <div class="row"><span class="without" id="cmp-time-without">0m</span><span class="with" id="cmp-time-with">0m</span></div>
-      </div>
-    </div>
+<div id="arrival">
+  <div class="arrival-hero">
+    <h1>Tally</h1>
+    <p class="arrival-caption">Payment-to-invoice reconciliation that knows when it doesn't know.</p>
   </div>
-
-  <div class="play-bar">
-    <span class="world-badge" id="world-badge">Demo world</span>
-    <button type="button" class="play-btn" id="play-btn">▶ Play the submission batch</button>
-    <button type="button" class="play-btn pause" id="pause-btn" style="display:none;">⏸ Pause</button>
-    <div class="speed-box">
-      <label for="speed">Speed</label>
-      <input type="range" id="speed" min="50" max="1000" step="50" value="300">
-      <span id="speed-value">300ms/payment</span>
+  <div id="arrival-body">
+  <div class="arrival-card">
+    <div class="arrival-headline" id="arrival-headline">64 payments received from Razorpay</div>
+    <p class="arrival-sub" id="arrival-connected">Connected as: KFG Snacks Store (rzp_test_&hellip;)</p>
+    <div class="arrival-stats">
+      <div class="astat"><div class="an" id="arrival-value">&mdash;</div><div class="al">Total value</div></div>
+      <div class="astat"><div class="an" id="arrival-range">&mdash;</div><div class="al">Date range</div></div>
+      <div class="astat"><div class="an" id="arrival-customers">&mdash;</div><div class="al">Customers</div></div>
+      <div class="astat"><div class="an" id="arrival-count">64</div><div class="al">Payments</div></div>
     </div>
-    <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
-    <span class="play-progress" id="play-progress">0 / 0</span>
+    <p class="arrival-note">Received through the Razorpay webhook connection.</p>
+    <button type="button" class="process-btn" id="btn-process">Process these payments</button>
+    <button type="button" class="upload-toggle" id="btn-toggle-upload">Upload a bank statement (CSV) instead</button>
+    <div class="upload-panel" id="upload-panel" hidden>
+      <p>Expected columns: <code id="csv-columns"></code></p>
+      <div class="upload-row">
+        <input type="file" id="csv-file" accept=".csv,text/csv">
+        <button type="button" id="btn-upload">Upload and process</button>
+      </div>
+      <div class="upload-result" id="upload-result" style="display:none;"></div>
+    </div>
+    <a class="upload-toggle" href="/live" style="text-decoration:underline;">Watch the Live Razorpay world instead &rarr;</a>
+  </div>
+  </div>
+</div>
+
+<div id="workspace-wrap">
+  <div class="topstrip">
+    <div class="trow">
+      <div class="brand">Tally <span>&mdash; Simulation</span></div>
+      <div class="progress" id="progress-label">0 / 64</div>
+    </div>
+    <div class="trow">
+      <div class="counters">
+        <span class="c done">Done automatically <b id="c-done">0</b></span>
+        <span class="c check">Needed a quick check <b id="c-check">0</b></span>
+        <span class="c held">Could not sort <b id="c-held">0</b></span>
+      </div>
+    </div>
   </div>
 
-  <div id="with-agent-view">
-    <div class="top-grid">
-      <div class="card">
-        <h2>Add a payment</h2>
-        <form id="payment-form">
-          <div class="field"><label>Amount (₹)</label><input type="number" id="f-amount" step="0.01" required></div>
-          <div class="field"><label>Into virtual account</label><input type="text" id="f-va" placeholder="VA-1001"></div>
-          <div class="field"><label>Payer name</label><input type="text" id="f-payer" placeholder="Acme Traders"></div>
-          <div class="field"><label>Narration</label><input type="text" id="f-narration" placeholder="NEFT/Acme Traders/INV-1001"></div>
-          <div class="field"><label>Method</label>
-            <select id="f-method">
-              <option>NEFT</option><option>RTGS</option><option>UPI</option><option>IMPS</option>
-            </select>
-          </div>
-          <button type="submit" class="submit-btn">Submit payment</button>
-        </form>
-        <div class="h2-row">
-          <h2>Scenario library</h2>
-          <button type="button" class="run-all-btn" id="run-all-btn">▶ Run all in order</button>
+  <div class="workspace">
+    <div class="col leftcol">
+      <div class="controls">
+        <div class="stepbtns">
+          <button id="btn-prev" title="Previous payment (left arrow)">&larr; Previous</button>
+          <button class="primary" id="btn-next" title="Next payment (right arrow)">Next &rarr;</button>
         </div>
-        <div class="scenario-list" id="scenario-list"></div>
+        <button id="btn-play">Play</button>
+        <button id="btn-reset">Start over</button>
       </div>
-
-      <div class="card trace-panel">
-        <h2>Decision trace</h2>
-        <div id="story-banner" class="story-banner">
-          <div class="story-title" id="story-title"></div>
-          <div class="story-text" id="story-text"></div>
-          <div class="story-watch"><b>Watch:</b> <span id="story-watch"></span></div>
-        </div>
-        <div id="trace-content"><div class="trace-empty">Pick a scenario, or submit a payment, to see the engine think.</div></div>
-      </div>
+      <div class="box paylist" id="paylist"></div>
     </div>
 
-    <div class="bottom-grid">
-      <div class="card">
-        <h2>Ledger</h2>
-        <table>
-          <thead><tr><th>Payment</th><th>Invoice</th><th class="num">Amount</th><th>Code</th><th>Entry type</th><th class="num">Conf.</th><th>Status</th></tr></thead>
-          <tbody id="ledger-body"></tbody>
-        </table>
+    <div class="col centrecol">
+      <div class="box centre" id="centre"></div>
+    </div>
+
+    <div class="col rightcol" id="rightcol">
+      <div class="panel">
+        <h2><span class="pnum">1</span> Payments we sorted out <span class="pcount" id="pcount-sorted">(0)</span></h2>
+        <div class="psub">Money we matched to a bill.</div>
+        <div class="filter-banner" id="filter-banner-sorted"><span id="filter-text-sorted"></span><button id="clear-filter-sorted">Clear filter</button></div>
+        <div class="pbody" id="p-sorted"></div>
       </div>
-      <div class="card">
-        <h2>Exception queue</h2>
-        <table>
-          <thead><tr><th>Payment</th><th class="num">Amount</th><th>Code</th><th>Why</th></tr></thead>
-          <tbody id="exceptions-body"></tbody>
-        </table>
+      <div class="panel">
+        <h2><span class="pnum">2</span> Payments we could not sort out <span class="pcount" id="pcount-held">(0)</span></h2>
+        <div class="psub">Money we could not place. We did not guess.</div>
+        <div class="filter-banner" id="filter-banner-held"><span id="filter-text-held"></span><button id="clear-filter-held">Clear filter</button></div>
+        <div class="pbody" id="p-held"></div>
       </div>
-    </div>
-
-    <div class="card stack-card">
-      <h2>Actions</h2>
-      <table>
-        <thead><tr><th>Action</th><th>Target</th><th class="num">Amount</th><th>Note / draft</th><th>Status</th><th></th></tr></thead>
-        <tbody id="actions-body"></tbody>
-      </table>
-    </div>
-
-    <div class="card stack-card">
-      <h2>Customers</h2>
-      <table>
-        <thead><tr><th>Name</th><th>Virtual account</th><th>Status</th><th class="num">Open invoices</th><th class="num">Certain balance</th><th class="num">Unapplied credit</th></tr></thead>
-        <tbody id="customers-body"></tbody>
-      </table>
-    </div>
-
-    <div class="card stack-card">
-      <h2>Live invoice ledger</h2>
-      <table>
-        <thead><tr><th>Invoice</th><th>Customer</th><th>Virtual account</th><th class="num tip" data-tip="What the bill was originally for.">Amount</th><th class="num tip" data-tip="How much is still unpaid.">Balance</th><th>Disputed</th></tr></thead>
-        <tbody id="invoices-body"></tbody>
-      </table>
+      <div class="panel">
+        <h2><span class="pnum">3</span> What we are doing about it <span class="pcount" id="pcount-doing">(0)</span></h2>
+        <div class="psub">The next step for each one we could not place.</div>
+        <div class="pbody" id="p-doing"></div>
+      </div>
     </div>
   </div>
+</div>
 
-  <div id="without-agent-view">
-    <div class="card">
-      <h2>Raw bank statement</h2>
-      <p class="statement-note">What a clerk actually sees: amount, date, payer name, narration. No invoice
-        column, no reason code, no confidence -- because without the agent, none of that exists yet.</p>
-      <table>
-        <thead><tr><th>Date</th><th class="num">Amount</th><th>Payer</th><th>Narration</th></tr></thead>
-        <tbody id="raw-statement-body"></tbody>
-      </table>
+<div id="below-day">
+  <div class="section-title">Summary by case type</div>
+  <table class="summary-table">
+    <thead><tr><th></th><th>Case</th><th class="num">Count</th><th class="num">Total value</th><th>What it means</th></tr></thead>
+    <tbody id="summary-body"></tbody>
+  </table>
+
+  <div class="section-title">How the batch was handled</div>
+  <p class="headline-sum">These three numbers add up to all 64 payments.</p>
+  <div class="headline-row">
+    <div class="headline done"><div class="hn" id="head-done">0</div><div class="hl">Done automatically</div></div>
+    <div class="headline check"><div class="hn" id="head-check">0</div><div class="hl">Needed a quick check</div></div>
+    <div class="headline held"><div class="hn" id="head-held">0</div><div class="hl">Could not sort</div></div>
+  </div>
+
+  <div class="section-title">Charts</div>
+  <div class="charts-card">
+    <div class="charts-grid">
+      <div class="chart-box">
+        <div class="chart-title">Where the stuck money is</div>
+        <div id="chart-hbar"></div>
+        <div class="chart-caption">Most stuck money is payments where we do not know who sent it.</div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Confidence dial trade-off</div>
+        <div id="chart-line"></div>
+        <div class="chart-caption">Stricter means fewer done automatically and more for a person to check.</div>
+      </div>
+    </div>
+    <div class="chart-box chart-box-wide">
+      <div class="chart-title">Submission vs. holdout</div>
+      <div id="chart-groupedbar"></div>
+      <div class="chart-caption">Grey is my own data. Red is data written to break it. The red numbers are the honest ones.</div>
     </div>
   </div>
-</main>
+</div>
 
-<button type="button" class="ideas-tab" id="ideas-tab">💡 Seven ideas</button>
-<aside class="ideas-panel" id="ideas-panel">
-  <div class="ideas-header">
-    <h2>Seven ideas</h2>
-    <button type="button" class="ideas-close" id="ideas-close">✕</button>
+<button type="button" id="chat-fab" aria-label="Ask the ledger">💬</button>
+<div id="chat-panel" hidden>
+  <div class="chat-head">
+    <span class="ch-title">Ask the ledger</span>
+    <span class="chat-readonly-tag">read-only</span>
+    <button type="button" id="chat-close" aria-label="Close">&times;</button>
   </div>
-  <p class="ideas-sub">What this app actually argues, one idea per card. "Show me" runs the scenario that proves it.</p>
-  <div id="ideas-list"></div>
-</aside>
-
-<div id="toasts"></div>
+  <div class="chat-body" id="chat-body"></div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" placeholder="Ask about the ledger&hellip;" autocomplete="off">
+    <button type="button" id="chat-send">Send</button>
+  </div>
+</div>
 
 <script>
-const rupees = p => "₹" + (p / 100).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
-const escapeHtml = s => (s || "").replace(/[&<>"']/g, c => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-}[c]));
+const RS = p => "₹" + Math.round(p / 100).toLocaleString("en-IN");
+const esc = s => (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const HELD = new Set(["AMBIG-N", "NO-MATCH", "SUSPENSE"]);
+const badgeOf = (s, code) => esc((s.code_badge && s.code_badge[code]) || code);
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
@@ -460,194 +631,130 @@ async function api(path, opts) {
   return res.json();
 }
 
-function toast(msg) {
-  const el = document.createElement("div");
-  el.className = "toast";
-  el.textContent = msg;
-  document.getElementById("toasts").appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+let arrival = null;
+let playing = false;
+let H = [];              // the whole batch, frozen: H[k] = frame after payment k (H[0] = opening)
+let view = 0;             // which frame is on screen (0 = opening, 1..64 = payments)
+let flashN = null;
+let sentSet = new Set();
+let CLOSING_VIEW = 64;
+const expandedDrafts = new Set();
+let codeFilter = null;    // set by clicking a "summary by case type" row
+let reachedEnd = false;
+
+function frame() { return H[Math.min(view, H.length - 1)]; }
+function bucketOf(ev) {
+  return HELD.has(ev.final_code) ? "held"
+       : (ev.confidence != null && ev.confidence >= frame().threshold) ? "done" : "check";
 }
 
-function flashRow(pid) {
-  document.querySelectorAll(`tr[data-pid="${pid}"]`).forEach(tr => {
-    tr.classList.remove("row-flash");
-    void tr.offsetWidth;
-    tr.classList.add("row-flash");
-  });
+function moneyLabel(row) {
+  if (row.code === "DUP-ONACC") return RS(row.real_paise) + " now credit";
+  if (row.code === "SUSPENSE") return RS(row.real_paise) + " set aside";
+  if (row.writeoff_paise > 0)
+    return RS(row.real_paise) + " in, " + RS(row.writeoff_paise) + " written off";
+  if (row.code === "PART-EXP") return RS(row.real_paise) + " in (part)";
+  return RS(row.real_paise) + " in";
 }
 
-/* -- plain-English hover/click tooltips ------------------------------ */
-const REASON_TIP = {
-  EXACT: "Bill number and amount both agreed.",
-  "REF-FUZZY": "The bill number was typed wrong. AI worked out which one they meant.",
-  "PART-EXP": "They paid part of it. The rest is expected later.",
-  "RESID-DED": "They paid less on purpose. The bill is closed and the gap recorded as a deduction.",
-  "TOL-FEE": "A tiny amount was missing, small enough to write off. The bill closed anyway.",
-  "BULK-N": "One payment covering several bills at once.",
-  "FIFO-TIE": "Two bills were identical in every way, so we applied the oldest-first rule.",
-  "DUP-ONACC": "They paid the same bill twice. The extra is held as credit for their next bill.",
-  "AMBIG-N": "We know who paid. We cannot tell which bill it settles.",
-  "NO-MATCH": "We know who paid. Nothing they owe fits this amount.",
-  SUSPENSE: "We do not even know who sent this money.",
-};
-const ENTRY_TYPE_TIP = {
-  CASH: "Real money that arrived in the bank.",
-  ADJUSTMENT: "A write-off. This money never arrived.",
-};
-const LEDGER_STATUS_TIP = {
-  auto: "Confident enough to apply on its own. No human needed.",
-  human: "Matched, but scored below the dial. A person should confirm it.",
-};
-const CUSTOMER_STATUS_TIP = {
-  CLEAN: "Nothing outstanding.",
-  PARTIAL: "Some bills still open.",
-  PROVISIONAL: "We know exactly what they owe. We are less sure which bills are still open.",
-};
+/* -- Arrival screen -------------------------------------------------- */
+function fmtDate(s) {
+  // "2026-06-23 14:13:00" -> "23 Jun 2026"
+  const d = new Date(s.replace(" ", "T") + "Z");
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
 
-// click toggles a tooltip open (so it works if the mouse isn't over it
-// during a screen recording); hover already works via pure CSS.
-document.addEventListener("click", e => {
-  const tip = e.target.closest(".tip");
-  document.querySelectorAll(".tip.tip-open").forEach(el => {
-    if (el !== tip) el.classList.remove("tip-open");
-  });
-  if (tip) tip.classList.toggle("tip-open");
+function renderArrival(a) {
+  arrival = a;
+  document.getElementById("arrival-headline").textContent = `${a.payment_count} payments received from Razorpay`;
+  document.getElementById("arrival-connected").textContent = `Connected as: ${a.merchant_name} (${a.merchant_key})`;
+  document.getElementById("arrival-value").textContent = RS(a.total_value_paise);
+  document.getElementById("arrival-range").textContent = `${fmtDate(a.date_from)} – ${fmtDate(a.date_to)}`;
+  document.getElementById("arrival-customers").textContent = a.unmapped_count
+    ? `${a.customer_count} (+${a.unmapped_count} unmapped)`
+    : String(a.customer_count);
+  document.getElementById("arrival-count").textContent = a.payment_count;
+  document.getElementById("csv-columns").textContent = a.csv_columns.join(", ");
+}
+
+document.getElementById("btn-toggle-upload").addEventListener("click", () => {
+  const panel = document.getElementById("upload-panel");
+  panel.hidden = !panel.hidden;
 });
 
-const ACTION_LABELS = {
-  QUERY_CUSTOMER: "Query customer", SEND_STATEMENT: "Send statement",
-  APPLY_CREDIT: "Apply credit", HOLD_AND_ESCALATE: "Hold & escalate",
-};
-const STATUS_PILL = {
-  draft: "pending", sent: "good", executed: "good",
-  "partially executed": "pending", holding: "pending",
-};
-
-function renderActions(actions) {
-  const body = document.getElementById("actions-body");
-  body.innerHTML = actions.length ? actions.map(a => {
-    const noteHtml = a.draft
-      ? `<details class="draft-details"><summary>${escapeHtml(a.note || "Drafted message")}</summary>` +
-        `<pre class="draft-text">${escapeHtml(a.draft)}</pre></details>`
-      : escapeHtml(a.note || "");
-    const canSend = a.draft && a.status === "draft";
-    return `<tr data-aid="${a.action_id}">
-      <td><span class="pill neutral">${ACTION_LABELS[a.action_type] || a.action_type}</span></td>
-      <td>${escapeHtml(a.target)}</td>
-      <td class="num">${rupees(a.amount_paise)}</td>
-      <td class="action-note">${noteHtml}</td>
-      <td><span class="pill ${STATUS_PILL[a.status] || 'neutral'}">${a.status}</span></td>
-      <td>${canSend ? `<button type="button" class="send-btn" data-aid="${a.action_id}">Send</button>` : ""}</td>
-    </tr>`;
-  }).join("") : '<tr class="empty-row"><td colspan="6">No open actions.</td></tr>';
-
-  body.querySelectorAll(".send-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const resp = await api("/actions/send", {
-        method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({action_id: btn.dataset.aid}),
-      });
-      renderState(resp.state);
-      toast(`${btn.dataset.aid} marked as sent`);
+document.getElementById("btn-upload").addEventListener("click", async () => {
+  const input = document.getElementById("csv-file");
+  const resultBox = document.getElementById("upload-result");
+  if (!input.files.length) { alert("Choose a CSV file first."); return; }
+  const text = await input.files[0].text();
+  resultBox.style.display = "block";
+  resultBox.textContent = "Processing…";
+  try {
+    const resp = await api("/upload", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ csv_text: text }),
     });
-  });
+    const results = resp.results || [];
+    let done = 0, check = 0, held = 0;
+    results.forEach(r => {
+      if (!r.resolved) { held++; return; }
+      const conf = r.allocation && r.allocation[0] ? r.allocation[0].confidence : null;
+      const code = r.allocation && r.allocation[0] ? r.allocation[0].reason_code : null;
+      if (HELD.has(code)) held++;
+      else if (conf != null && conf >= 85) done++;
+      else check++;
+    });
+    resultBox.textContent =
+      `Processed ${resp.processed} payment(s): ${done} done automatically, ` +
+      `${check} needed a quick check, ${held} could not be sorted.`;
+  } catch (err) {
+    resultBox.textContent = "Could not process that file: " + err.message;
+  }
+});
+
+document.getElementById("btn-process").addEventListener("click", () => {
+  document.getElementById("arrival").style.display = "none";
+  document.getElementById("workspace-wrap").classList.add("on");
+  setView(0);
+});
+
+/* -- paylist / centre / right panels ---------------------------------- */
+function renderTop(s) {
+  document.getElementById("progress-label").textContent = `${Math.min(view, 64)} / 64`;
+  document.getElementById("c-done").textContent = s.events.filter(e => bucketOf(e) === "done").length;
+  document.getElementById("c-check").textContent = s.events.filter(e => bucketOf(e) === "check").length;
+  document.getElementById("c-held").textContent = s.events.filter(e => bucketOf(e) === "held").length;
 }
 
-function renderComparison(cmp) {
-  document.getElementById("cmp-rows-without").textContent = cmp.without.rows_to_read;
-  document.getElementById("cmp-rows-with").textContent = cmp.with.rows_to_read;
-  document.getElementById("cmp-dec-without").textContent = cmp.without.decisions_needed;
-  document.getElementById("cmp-dec-with").textContent = cmp.with.decisions_needed;
-  document.getElementById("cmp-time-without").textContent = cmp.without.estimated_label;
-  document.getElementById("cmp-time-with").textContent = cmp.with.estimated_label;
+function renderPayList(s) {
+  const rows = [];
+  for (let n = 1; n <= 64; n++) {
+    const ev = s.events.find(e => e.n === n);
+    let cls = "prow", dot = "dot";
+    if (ev) dot += " " + bucketOf(ev);
+    else cls += " future";
+    if (view === n) cls += " cur";
+    const label = ev ? esc(ev.customer_name || "Unknown sender") : "…";
+    const amt = ev ? RS(ev.amount_paise) : "";
+    rows.push(`<div class="${cls}" data-n="${n}">
+      <span class="${dot}"></span>
+      <span class="num">${n}</span>
+      <span class="pname">${label}</span>
+      <span class="amt">${amt}</span>
+    </div>`);
+  }
+  document.getElementById("paylist").innerHTML = rows.join("");
+  const curEl = document.querySelector(".prow.cur");
+  if (curEl) curEl.scrollIntoView({ block: "nearest" });
 }
 
-function renderRawStatement(paymentLog) {
-  const body = document.getElementById("raw-statement-body");
-  body.innerHTML = paymentLog.length ? paymentLog.map(p => `
-    <tr>
-      <td class="mono">${(p.created_at || "").replace("T", " ").slice(0, 16)}</td>
-      <td class="num">${rupees(p.amount_paise)}</td>
-      <td>${escapeHtml(p.payer_name || "")}</td>
-      <td class="text-secondary">${escapeHtml(p.narration || "")}</td>
-    </tr>`).join("") : '<tr class="empty-row"><td colspan="4">No payments submitted yet.</td></tr>';
+function stepHtml(st) {
+  const ic = st.ok === true ? '<span class="ic y">&check;</span>'
+           : st.ok === false ? '<span class="ic n">&times;</span>'
+           : '<span class="ic d">&ndash;</span>';
+  return `<div class="step">${ic}<div class="qa"><div class="q">${esc(st.q)}</div><div class="a">${esc(st.a)}</div></div></div>`;
 }
 
-let lastState = null;
-
-function renderState(state) {
-  lastState = state;
-  document.getElementById("kpi-auto").textContent = state.kpis.auto_matched;
-  document.getElementById("kpi-human").textContent = state.kpis.human_touch;
-  document.getElementById("kpi-requeue").textContent = state.kpis.resolved_on_requeue_total;
-  document.getElementById("kpi-value").textContent = rupees(state.kpis.exception_value_paise);
-  document.getElementById("dial").value = state.kpis.threshold;
-  document.getElementById("dial-value").textContent = state.kpis.threshold;
-  document.getElementById("world-badge").textContent =
-    state.world === "batch" ? "Batch world (submission dataset)" : "Demo world";
-
-  const ledgerBody = document.getElementById("ledger-body");
-  const resolvedRows = state.ledger.filter(r => !r.is_exception);
-  ledgerBody.innerHTML = resolvedRows.length ? resolvedRows.map(r => `
-    <tr data-pid="${r.payment_id}">
-      <td class="mono">${r.payment_id}</td>
-      <td class="mono">${r.invoice_id || "&mdash;"}</td>
-      <td class="num">${rupees(r.amount_paise)}</td>
-      <td><span class="pill good tip" data-tip="${escapeHtml(REASON_TIP[r.reason_code] || "")}">${r.reason_code}</span></td>
-      <td>${r.entry_type === "CASH" ? `<span class="pill good tip" data-tip="${escapeHtml(ENTRY_TYPE_TIP.CASH)}">CASH</span>` : `<span class="pill pending tip" data-tip="${escapeHtml(ENTRY_TYPE_TIP.ADJUSTMENT)}">ADJUSTMENT</span>`}</td>
-      <td class="num">${r.confidence}</td>
-      <td>${r.auto_posted ? `<span class="pill good tip" data-tip="${escapeHtml(LEDGER_STATUS_TIP.auto)}">auto-posted</span>` : `<span class="pill pending tip" data-tip="${escapeHtml(LEDGER_STATUS_TIP.human)}">human touch</span>`}</td>
-    </tr>`).join("") : '<tr class="empty-row"><td colspan="7">No resolved allocations yet.</td></tr>';
-
-  const excBody = document.getElementById("exceptions-body");
-  excBody.innerHTML = state.exception_queue.length ? state.exception_queue.map(r => `
-    <tr data-pid="${r.payment_id}">
-      <td class="mono">${r.payment_id}</td>
-      <td class="num">${rupees(r.amount_paise)}</td>
-      <td><span class="pill bad tip" data-tip="${escapeHtml(REASON_TIP[r.reason_code] || "")}">${r.reason_code}</span>${r.pending ? ' <span class="pill pending">retryable</span>' : ''}</td>
-      <td>${escapeHtml(r.rationale)}</td>
-    </tr>`).join("") : '<tr class="empty-row"><td colspan="4">Exception queue is empty.</td></tr>';
-
-  renderActions(state.actions);
-
-  const custBody = document.getElementById("customers-body");
-  // Column order here must track the <thead> literally: Name, Virtual
-  // account, Status, Open invoices, Certain balance, Unapplied credit.
-  custBody.innerHTML = state.customers.map(c => {
-    const colName = `<td>${escapeHtml(c.name)}</td>`;
-    const colVA = `<td class="mono">${c.virtual_account}</td>`;
-    const statusPill = c.status === "CLEAN" ? "good" : c.status === "PROVISIONAL" ? "bad" : "pending";
-    const colStatus = `<td><span class="pill ${statusPill} tip" data-tip="${escapeHtml(CUSTOMER_STATUS_TIP[c.status] || "")}">${c.status}</span></td>`;
-    const colOpenCount = `<td class="num">${c.open_invoice_count}</td>`;
-    const colBalance = `<td class="num">${rupees(c.certain_balance_paise)}</td>`;
-    const colCredit = `<td class="num">${c.unapplied_credit_paise ? rupees(c.unapplied_credit_paise) : "&mdash;"}</td>`;
-    return `<tr>${colName}${colVA}${colStatus}${colOpenCount}${colBalance}${colCredit}</tr>`;
-  }).join("");
-
-  const invBody = document.getElementById("invoices-body");
-  // Column order here must track the <thead> literally: Invoice, Customer,
-  // Virtual account, Amount, Balance, Disputed -- one <td> per header, in
-  // that order. Balance is always a real value (₹0.00 for a fully paid
-  // invoice, not a blank) -- "&mdash;" is reserved for fields that are
-  // genuinely absent, not for zero.
-  invBody.innerHTML = state.invoices.map(i => {
-    const colInvoice = `<td class="mono">${i.invoice_id}</td>`;
-    const colCustomer = `<td>${escapeHtml(i.customer_name)}</td>`;
-    const colVA = `<td class="mono">${i.virtual_account}</td>`;
-    const colAmount = `<td class="num">${rupees(i.amount_paise)}</td>`;
-    const colBalance = `<td class="num">${rupees(i.balance_paise)}</td>`;
-    const colDisputed = `<td>${i.disputed ? '<span class="pill bad">disputed</span>' : ""}</td>`;
-    return `<tr>${colInvoice}${colCustomer}${colVA}${colAmount}${colBalance}${colDisputed}</tr>`;
-  }).join("");
-
-  renderComparison(state.comparison);
-  renderRawStatement(state.payment_log);
-}
-
-/* -- Section C: plain-English line per trace layer, plus a synthetic
-   L6_ACTION step. L6 isn't part of the engine's trace (the action layer
-   runs separately, in simulator/state.py) -- it's built here from the
-   /payment response's own state.actions, not invented client-side. */
 const LAYER_PLAIN = {
   L0_IDENTITY: "Who sent this money?",
   L1_COMPOSITE: "Did they write the bill number, and does the amount agree?",
@@ -655,114 +762,51 @@ const LAYER_PLAIN = {
   L3_AI: "Can AI make sense of messy text?",
   L4_POLICY: "Does a house rule settle it?",
   L5_EXCEPTION: "We could not prove it. Here is why.",
-  L6_ACTION: "Here is what we will do about it.",
 };
 
-function buildActionStep(resp) {
-  const actions = (resp.state && resp.state.actions) || [];
-  const action = actions.find(a => a.payment_id === resp.payment_id);
-  if (!action) {
-    return {
-      layer: "L6_ACTION", checks: [], outcome: "SKIP",
-      note: "Fully resolved -- no further action needed.",
-    };
-  }
-  const label = ACTION_LABELS[action.action_type] || action.action_type;
-  const executed = action.status === "executed" || action.status === "sent";
-  return {
-    layer: "L6_ACTION", checks: [], outcome: executed ? "PASS" : "FAIL",
-    note: `${label}: ${action.note || ""}`,
-  };
+function traceRowHtml(step) {
+  const plain = LAYER_PLAIN[step.layer] || "";
+  return `<div class="tracerow">
+    <div class="tic ${step.outcome}">${step.outcome === "PASS" ? "&check;" : step.outcome === "FAIL" ? "&times;" : "&ndash;"}</div>
+    <div class="tbody">
+      <div class="layer">${step.layer}</div>
+      ${plain ? `<div class="plain">${esc(plain)}</div>` : ""}
+      <div class="note">${esc(step.note)}</div>
+    </div>
+  </div>`;
 }
 
-function renderTrace(trace, finalResult) {
-  const content = document.getElementById("trace-content");
-  content.innerHTML = "";
-  trace.forEach((step, i) => {
-    const el = document.createElement("div");
-    el.className = "trace-step";
-    el.style.animationDelay = (i * 180) + "ms";
-    const checksHtml = step.checks.map(c =>
-      `<li class="${c.passed ? "passed" : "failed"}">${c.name}${c.detail ? " &mdash; " + c.detail : ""}</li>`
-    ).join("");
-    const plain = LAYER_PLAIN[step.layer] || "";
-    el.innerHTML = `
-      <div class="trace-icon ${step.outcome}">${step.outcome === "PASS" ? "&check;" : step.outcome === "FAIL" ? "&times;" : "&ndash;"}</div>
-      <div class="trace-body" style="flex:1;">
-        <div class="layer">${step.layer}</div>
-        ${plain ? `<div class="plain-line">${escapeHtml(plain)}</div>` : ""}
-        <div class="note">${step.note}</div>
-        <ul class="checks">${checksHtml}</ul>
-      </div>
-      <div class="trace-outcome ${step.outcome}">${step.outcome}</div>`;
-    content.appendChild(el);
-  });
-  if (finalResult) {
-    const el = document.createElement("div");
-    el.className = "trace-result" + (finalResult.isException ? " exception" : "");
-    el.style.animationDelay = (trace.length * 180) + "ms";
-    el.innerHTML = (finalResult.plain
-      ? `<div class="trace-result-plain">${escapeHtml(finalResult.plain)}</div>` : "") + finalResult.html;
-    content.appendChild(el);
+/* -- plain-English sentence for the 51 payments that have no hand-written
+   story line -- built from the same real allocation fields the narrated
+   payments expose, just generated instead of hand-written. */
+function plainSentence(ev) {
+  const amt = RS(ev.amount_paise);
+  const who = ev.customer_name || "the sender";
+  if (HELD.has(ev.final_code)) {
+    if (ev.final_code === "SUSPENSE")
+      return `${amt} arrived, but we don't know who sent it -- the account it came from doesn't match any customer.`;
+    if (ev.final_code === "AMBIG-N")
+      return `We know ${who} sent ${amt}, but we cannot tell which of their bills it settles.`;
+    return `We know ${who} sent ${amt}, but nothing they currently owe adds up to that amount.`;
   }
-}
-
-/* -- Section C: plain-English readout, no codes -- generated from the
-   actual result (customer name, real amounts, what changed), shown
-   above the technical reason-code line, which stays as-is. */
-function findInvoice(resp, invoiceId) {
-  return (resp.state.invoices || []).find(i => i.invoice_id === invoiceId);
-}
-
-function resolveCustomerName(resp, payment) {
-  if (payment.payer_name) return payment.payer_name;
-  const cust = (resp.state.customers || []).find(c => c.virtual_account === payment.virtual_account);
-  return cust ? cust.name : null;
-}
-
-function plainSentence(resp, payment) {
-  const amt = rupees(payment.amount_paise);
-
-  if (!resp.resolved) {
-    const name = resolveCustomerName(resp, payment) || "the sender";
-    if (resp.pending_reason === "AMBIG-N") {
-      return `We know ${name} sent ${amt}, but we cannot tell which of their bills it settles.`;
-    }
-    return `We know ${name} sent ${amt}, but nothing they currently owe adds up to that amount.`;
-  }
-
-  const rows = resp.allocation;
-  const primary = rows.find(r => r.invoice_id) || rows[0];
-  const code = primary.reason_code;
-
-  if (code === "SUSPENSE") {
-    return `${amt} arrived, but we don't know who sent it -- the account it came from doesn't match any customer.`;
-  }
-
-  const who = resolveCustomerName(resp, payment) || "The customer";
-  const inv = primary.invoice_id ? findInvoice(resp, primary.invoice_id) : null;
-  const adjRow = rows.find(r => r.entry_type === "ADJUSTMENT");
-
-  switch (code) {
+  const bill = ev.bills[0];
+  switch (ev.final_code) {
     case "EXACT":
-      return `${who} paid ${amt} for ${primary.invoice_id}. It is now fully settled.`;
+      return `${who} paid ${amt} for ${bill}. It is now fully settled.`;
     case "REF-FUZZY":
-      return `${who} paid ${amt} but wrote the bill number wrong. We worked out they meant ${primary.invoice_id}, and it is now closed.`;
+      return `${who} paid ${amt} but wrote the bill number wrong. We worked out they meant ${bill}, and it is now closed.`;
     case "PART-EXP":
-      return `${who} paid ${amt} towards a ${inv ? rupees(inv.amount_paise) : "larger"} bill.`
-        + (inv ? ` ${rupees(inv.balance_paise)} is still owed.` : "");
+      return `${who} paid ${amt} towards a ${ev.primary_invoice_amount_paise ? RS(ev.primary_invoice_amount_paise) : "larger"} bill.`
+        + (ev.invoice_balance_after_paise != null ? ` ${RS(ev.invoice_balance_after_paise)} is still owed.` : "");
     case "RESID-DED":
-      return `${who} paid ${amt} against ${primary.invoice_id}, deliberately less than the full amount. `
-        + `The bill is closed and ${adjRow ? rupees(adjRow.amount_paise) : "the gap"} is recorded as a deduction.`;
+      return `${who} paid ${amt} against ${bill}, deliberately less than the full amount. `
+        + `The bill is closed and ${RS(ev.writeoff_paise)} is recorded as a deduction.`;
     case "TOL-FEE":
-      return `${who} paid ${amt} on ${primary.invoice_id}. The `
-        + `${adjRow ? rupees(adjRow.amount_paise) : "small"} shortfall was small enough to write off, so the bill is closed.`;
-    case "BULK-N": {
-      const ids = rows.filter(r => r.invoice_id).map(r => r.invoice_id);
-      return `${who} sent ${amt} in one payment, covering ${ids.length} bills at once (${ids.join(", ")}). All are now closed.`;
-    }
+      return `${who} paid ${amt} on ${bill}. The ${RS(ev.writeoff_paise)} shortfall was small enough to write off, so the bill is closed.`;
+    case "BULK-N":
+      return `${who} sent ${amt} in one payment, covering ${ev.bills.length} bills at once (${ev.bills.join(", ")}). All are now closed.`;
     case "FIFO-TIE":
-      return `${who} paid ${amt} against one of several identical bills. We closed the oldest one, ${primary.invoice_id}.`;
+      return `${who} paid ${amt} against one of several identical bills. We closed the older one, ${bill}.`;
     case "DUP-ONACC":
       return `${who} paid ${amt} again for a bill that was already settled. It's held as credit for their next bill.`;
     default:
@@ -770,320 +814,781 @@ function plainSentence(resp, payment) {
   }
 }
 
-function describeOutcome(resp, payment) {
-  const plain = plainSentence(resp, payment);
-  if (resp.resolved) {
-    const rows = resp.allocation;
-    const primary = rows.find(r => r.invoice_id) || rows[0];
-    const html = `<b>${primary.reason_code}</b> &middot; ${primary.invoice_id ? "invoice " + primary.invoice_id : "no invoice"} &middot; confidence ${primary.confidence}<br>${primary.rationale}`;
-    return {isException: primary.reason_code === "SUSPENSE", plain, html};
+/* -- "What changed", naming the balance before and after -- uses the
+   invoice's original amount (captured server-side as
+   primary_invoice_amount_paise, or looked up in s.setup for a
+   multi-bill payment) as "before"; that amount never changes once an
+   invoice is created, so it's always the right "before" figure
+   regardless of when this renders. */
+function whatChangedGeneric(ev, s) {
+  if (HELD.has(ev.final_code)) return "Nothing paid. Held for a person to review.";
+  if (ev.final_code === "DUP-ONACC") return `${RS(ev.amount_paise)} kept aside as credit.`;
+  const bill = ev.bills[0];
+  const before = ev.primary_invoice_amount_paise;
+  if (!bill || before == null) return "Recorded.";
+  const cust = (s.setup || []).find(c => c.account_number === ev.virtual_account);
+
+  if (ev.bills.length > 1) {
+    return ev.bills.map(id => {
+      const inv = cust ? cust.invoices.find(i => i.invoice_id === id) : null;
+      return inv ? `Bill ${id} was ${RS(inv.amount_paise)}. Now paid.` : `Bill ${id} is now paid.`;
+    }).join(" ");
   }
-  return {isException: true, plain, html: `<b>${resp.pending_reason}</b> &middot; parked for review<br>${resp.trace[resp.trace.length-1]?.note || ""}`};
-}
-
-async function handlePaymentResponse(resp, payment) {
-  const traceWithAction = [...resp.trace, buildActionStep(resp)];
-  renderTrace(traceWithAction, describeOutcome(resp, payment));
-  renderState(resp.state);
-  if (resp.resolved) flashRow(resp.payment_id);
-  resp.resolved_on_requeue.forEach(pid => {
-    toast(`${pid} resolved on re-queue`);
-    flashRow(pid);
-  });
-  return resp;
-}
-
-async function submitFields(fields) {
-  const resp = await api("/payment", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(fields),
-  });
-  return await handlePaymentResponse(resp, fields);
-}
-
-document.getElementById("payment-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const fields = {
-    amount_paise: Math.round(parseFloat(document.getElementById("f-amount").value) * 100),
-    virtual_account: document.getElementById("f-va").value || null,
-    payer_name: document.getElementById("f-payer").value || null,
-    narration: document.getElementById("f-narration").value || "",
-    method: document.getElementById("f-method").value,
-  };
-  hideStoryBanner();
-  await submitFields(fields);
-});
-
-document.getElementById("reset-btn").addEventListener("click", async () => {
-  stopPlay();
-  const snapshot = await api("/reset", {method: "POST"});
-  ranScenarioIds = new Set();
-  renderScenarioList();
-  hideStoryBanner();
-  renderState(snapshot);
-  document.getElementById("trace-content").innerHTML = '<div class="trace-empty">Pick a scenario, or submit a payment, to see the engine think.</div>';
-});
-
-let dialTimer = null;
-document.getElementById("dial").addEventListener("input", e => {
-  document.getElementById("dial-value").textContent = e.target.value;
-  clearTimeout(dialTimer);
-  dialTimer = setTimeout(async () => {
-    const resp = await api("/dial", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({threshold: parseInt(e.target.value, 10)}),
-    });
-    renderState(resp.state);
-    resp.moved_payment_ids.forEach(flashRow);
-  }, 180);
-});
-
-/* -- Section A: scenario library -------------------------------------- */
-let scenarios = [];
-let ranScenarioIds = new Set();
-
-function showStoryBanner(scenario) {
-  document.getElementById("story-title").textContent = scenario.title;
-  document.getElementById("story-text").textContent = scenario.story;
-  document.getElementById("story-watch").textContent = scenario.watch;
-  document.getElementById("story-banner").style.display = "block";
-}
-
-function hideStoryBanner() {
-  document.getElementById("story-banner").style.display = "none";
-}
-
-function renderScenarioList() {
-  const box = document.getElementById("scenario-list");
-  box.innerHTML = scenarios.map((sc, i) => {
-    const locked = sc.requires && !ranScenarioIds.has(sc.requires);
-    return `<button type="button" class="scenario-item" data-id="${sc.id}" ${locked ? "disabled" : ""}>
-      <span class="scenario-num">${i + 1}</span>
-      <span class="scenario-title">${escapeHtml(sc.title)}${locked ? " <span class='scenario-lock'>🔒</span>" : ""}</span>
-      <span class="scenario-code">${sc.expected_reason_code}</span>
-    </button>`;
-  }).join("");
-  box.querySelectorAll(".scenario-item").forEach(btn => {
-    btn.addEventListener("click", () => runScenarioById(btn.dataset.id));
-  });
-}
-
-async function runScenarioById(id) {
-  const sc = scenarios.find(s => s.id === id);
-  if (!sc) return null;
-  showStoryBanner(sc);
-  let lastResp = null;
-  for (const payment of sc.payments) {
-    lastResp = await submitFields(payment);
+  if (ev.final_code === "FIFO-TIE") {
+    const sibling = cust
+      ? cust.invoices.find(i => i.invoice_id !== bill && i.amount_paise === before && i.balance_paise > 0)
+      : null;
+    const siblingTxt = sibling ? ` ${sibling.invoice_id} still open at ${RS(sibling.balance_paise)}.` : "";
+    return `Bill ${bill} was ${RS(before)}. Now paid.${siblingTxt}`;
   }
-  ranScenarioIds.add(sc.id);
-  renderScenarioList();
-  return lastResp;
-}
-
-async function loadScenarios() {
-  scenarios = await api("/scenarios");
-  renderScenarioList();
-}
-
-document.getElementById("run-all-btn").addEventListener("click", async () => {
-  const btn = document.getElementById("run-all-btn");
-  btn.disabled = true;
-  stopPlay();
-  const snapshot = await api("/reset", {method: "POST"});
-  ranScenarioIds = new Set();
-  renderState(snapshot);
-  renderScenarioList();
-  document.getElementById("trace-content").innerHTML = '<div class="trace-empty">Running all scenarios in order…</div>';
-  for (let i = 0; i < scenarios.length; i++) {
-    await runScenarioById(scenarios[i].id);
-    if (i < scenarios.length - 1) await new Promise(r => setTimeout(r, 4000));
+  if (ev.invoice_balance_after_paise > 0) {
+    return `Bill ${bill} was ${RS(before)}. Now ${RS(ev.invoice_balance_after_paise)} still owed.`;
   }
-  btn.disabled = false;
-});
+  if (ev.writeoff_paise > 0) {
+    return `Bill ${bill} was ${RS(before)}. Now paid -- ${RS(ev.real_paise)} received, ${RS(ev.writeoff_paise)} written off.`;
+  }
+  return `Bill ${bill} was ${RS(before)}. Now paid.`;
+}
 
-/* -- Section B: Seven Ideas panel --------------------------------------- */
-const SEVEN_IDEAS = [
-  {
-    title: "1. Confidence is counted, never asked",
-    text: "An AI says it is 92% sure whether it is right or wrong. So we never ask it. We add up things we can count instead.",
-    example: "Bill number correct +50, amount exact +30, only one possible bill +20 = 100. A repaired typo scores 30 instead of 50, so the same match lands lower.",
-    why: "Every point is defensible, and the dial means something.",
-    scenario: "typo_in_reference",
-  },
-  {
-    title: "2. Identity and allocation are different problems",
-    text: "Razorpay's virtual accounts already tell you WHO paid. Nothing tells you WHICH BILL it settles.",
-    example: "₹6,000 into Kumar's account. We know it is Kumar with certainty. We still cannot say which of his three bills it pays.",
-    why: "This app starts where Razorpay's product stops.",
-    scenario: "cant_tell_which_bill",
-  },
-  {
-    title: "3. A refusal is not permanent",
-    text: "Every time new money arrives, we retry everything we gave up on.",
-    example: "₹6,000 from Kumar is unsolvable on Monday. On Wednesday more money arrives, only one bill is left, and Monday's payment resolves itself.",
-    why: "Most exception queues only grow. This one drains.",
-    scenario: "it_solves_itself",
-  },
-  {
-    title: "4. Two kinds of certainty, reported separately",
-    text: "Which bills closed can be unknowable while the balance stays exact.",
-    example: "Paid ₹34,000 of ₹63,000 in odd amounts. Which bills closed: unknown. What is owed: ₹29,000, provably.",
-    why: "We report what we can prove apart from what we assumed.",
-    scenario: "balance_certain_split_unknown",
-  },
-  {
-    title: "5. A write-off is not cash",
-    text: "Money written off never arrived. It cannot be counted as received.",
-    example: "₹1,960 arrived on a ₹2,000 bill. The ledger shows ₹1,960 CASH and ₹40 ADJUSTMENT. Every run asserts that cash recorded equals cash received.",
-    why: "This is an accounting bug engineers do not see.",
-    scenario: "bank_took_a_fee",
-  },
-  {
-    title: "6. It does not stop at flagging",
-    text: "Every unsolved payment exits with an action, not just a label.",
-    example: "Cannot tell which bill -> drafts the email asking the customer. Paid twice -> applies the credit to the next bill automatically, no human.",
-    why: "The brief says close the loop. A flag does not close it.",
-    scenario: "paid_twice_by_mistake",
-  },
-  {
-    title: "7. The AI's job is deliberately small",
-    text: "The AI reads messy text and picks from a shortlist we hand it. It never decides an outcome, never touches money we can verify, and may say “I don't know”.",
-    example: "It repairs INV-10O2 to INV-1002, choosing only from bills that are actually open. It cannot invent a bill.",
-    why: "Keeping it narrow is what makes the result checkable.",
-    scenario: "typo_in_reference",
-  },
-];
+function renderCentreIntro() {
+  return `<p class="intro-def">Every payment arrives with an <b>account number</b> &mdash; a number
+    that belongs to one customer only, so we always know who paid. The job on this page is
+    <b>reconciliation</b>: matching the money that arrives to the bills sent out.</p>
+    <p class="intro-def" style="margin-top:14px;">Press <b>Next payment</b> to start. The first 13
+    payments are narrated in detail; the remaining 51 run through the exact same engine, shown at
+    full technical detail.</p>`;
+}
 
-function renderIdeas() {
-  const box = document.getElementById("ideas-list");
-  box.innerHTML = SEVEN_IDEAS.map(idea => `
-    <div class="idea-card">
-      <div class="idea-title">${escapeHtml(idea.title)}</div>
-      <div class="idea-text">${escapeHtml(idea.text)}</div>
-      <div class="idea-example"><b>Example:</b> ${escapeHtml(idea.example)}</div>
-      <div class="idea-why"><b>Why:</b> ${escapeHtml(idea.why)}</div>
-      <button type="button" class="idea-show-btn" data-scenario="${idea.scenario}">Show me</button>
-    </div>`).join("");
-  box.querySelectorAll(".idea-show-btn").forEach(btn => {
-    btn.addEventListener("click", () => showMeScenario(btn.dataset.scenario));
+function renderCentreCurrent(s, ev) {
+  const bucket = bucketOf(ev);
+  const sure = bucket === "held" ? "Held for a person to handle"
+             : bucket === "done" ? "Done automatically" : "Needs a quick check";
+  const moneyNote = !HELD.has(ev.final_code) ? `<div class="money-note">${esc(moneyLabel({
+    code: ev.final_code, real_paise: ev.real_paise, writeoff_paise: ev.writeoff_paise,
+  }))}</div>` : "";
+  const body = ev.is_narrated
+    ? `<div class="story">${esc(ev.story_line)}</div>
+       <div class="decide"><h2>How it decided</h2>${ev.how_it_decided.map(stepHtml).join("")}</div>
+       <div class="changed"><h2>What changed</h2><p>${esc(ev.what_changed)}</p></div>`
+    : `<div class="story">${esc(plainSentence(ev))}</div>
+       <div class="decide"><h2>How it decided</h2>${ev.trace.map(traceRowHtml).join("")}</div>
+       <div class="changed"><h2>What changed</h2><p>${esc(whatChangedGeneric(ev, s))}</p></div>`;
+  return `
+    <div class="verdict ${bucket}">
+      <span class="vbadge">${badgeOf(s, ev.final_code)}</span>
+      <span class="vplain">${esc(s.code_plain[ev.final_code] || "")}</span>
+      <span class="vsure">${sure}</span>
+    </div>
+    ${moneyNote}
+    <div class="cur-head">
+      <span class="amt">${RS(ev.amount_paise)}</span>
+      <span class="who">from ${esc(ev.customer_name || "an unknown sender")}${ev.is_narrated ? '<span class="narrated-tag">narrated</span>' : ""}</span>
+      <span class="when">payment ${ev.n} of 64</span>
+    </div>
+    <div class="note-line">Note on the transfer: ${esc(ev.narration || "(nothing written)")}</div>
+    ${body}`;
+}
+
+function renderCentreClosing() {
+  return `<h2>End of the batch</h2>
+    <p>All 64 payments have been processed.</p>
+    <p>The summary below shows how they broke down by case type, the three headline numbers, and
+    the charts -- scroll down to see them.</p>`;
+}
+
+/* -- "The shops - what they still owe": same shape as /story's setup
+   card, but 17 customers and 61 bills won't fit at once, so it defaults
+   to just the current payment's customer and offers a toggle for the
+   full, scrollable list (name + total owed only, not a full bill
+   breakdown -- that's what the default view is for). */
+let showAllShops = false;
+
+function billRowHtml(inv, hot) {
+  const paid = inv.balance_paise <= 0;
+  const partial = !paid && inv.balance_paise < inv.amount_paise;
+  // Status and amount are always separate columns -- status never
+  // replaces the amount, so a paid bill still shows what it was for.
+  const status = paid ? { txt: "✓ Paid", cls: "paid" }
+                : partial ? { txt: RS(inv.balance_paise) + " left", cls: "part" }
+                : { txt: "", cls: "" };
+  return `<div class="bill ${paid ? "done" : ""} ${hot.includes(inv.invoice_id) ? "hot" : ""}">
+    <span class="bi">${esc(inv.invoice_id)}${inv.disputed ? '<span class="tag">disputed</span>' : ""}</span>
+    <span class="bs ${status.cls}">${status.txt}</span>
+    <span class="ba">${RS(inv.amount_paise)}</span></div>`;
+}
+
+function renderShops(s, ev) {
+  const setup = s.setup || [];
+  const toggleBtn = `<button type="button" class="shops-toggle" id="shops-toggle">` +
+    `${showAllShops ? "Show current shop only" : "See all shops"}</button>`;
+
+  if (showAllShops) {
+    const rows = setup.map(c => {
+      const total = c.invoices.reduce((a, i) => a + i.balance_paise, 0);
+      return `<div class="shops-all-row"><span class="san">${esc(c.name)}</span>` +
+        `<span class="saa">${RS(total)} owed</span></div>`;
+    }).join("");
+    return `<div class="shops-wrap">
+      <div class="shops-title-row"><span class="shops-title">All shops (${setup.length}) &mdash; what they still owe</span>${toggleBtn}</div>
+      <div class="shops-all">${rows || '<div class="shops-none">No customers yet.</div>'}</div>
+    </div>`;
+  }
+
+  const va = ev ? ev.virtual_account : null;
+  const cust = va ? setup.find(c => c.account_number === va) : null;
+  const hot = ev ? ev.bills : [];
+  const body = cust
+    ? `<div class="shop-current">
+        <div class="sh-head">${esc(cust.name)}<span class="acct">${esc(cust.account_number)}</span></div>
+        <div class="bill-list">${cust.invoices.map(i => billRowHtml(i, hot)).join("") || '<div class="shops-none">No bills on file.</div>'}</div>
+      </div>`
+    : `<div class="shops-none">${ev ? "No account on this payment -- nothing to show." : "Press Next to see the first payment's shop."}</div>`;
+  return `<div class="shops-wrap">
+    <div class="shops-title-row"><span class="shops-title">The shop &mdash; what they still owe</span>${toggleBtn}</div>
+    ${body}
+  </div>`;
+}
+
+function renderCentre(s) {
+  const el = document.getElementById("centre");
+  const ev = (view >= 1 && view <= 64) ? s.events[view - 1] : null;
+  let detail;
+  if (view === 0) detail = renderCentreIntro();
+  else if (ev) detail = renderCentreCurrent(s, ev);
+  else detail = renderCentreClosing();
+  el.innerHTML = renderShops(s, ev) + `<div class="centre-detail">${detail}</div>`;
+  document.getElementById("shops-toggle").addEventListener("click", () => {
+    showAllShops = !showAllShops;
+    renderCentre(frame());
   });
 }
 
-async function showMeScenario(id) {
-  const sc = scenarios.find(s => s.id === id);
-  if (!sc) return;
-  if (sc.requires && !ranScenarioIds.has(sc.requires)) {
-    await runScenarioById(sc.requires);
-    await new Promise(r => setTimeout(r, 600));
+function passesFilter(code) {
+  return !codeFilter || codeFilter === code;
+}
+
+function renderRight(s) {
+  const fl = n => (n === flashN ? " flash" : "");
+
+  document.getElementById("pcount-sorted").textContent = `(${s.sorted_out.length})`;
+  document.getElementById("pcount-held").textContent = `(${s.could_not_sort.length})`;
+  document.getElementById("pcount-doing").textContent = `(${s.doing_about_it.length})`;
+
+  document.getElementById("filter-banner-sorted").classList.toggle("on", !!codeFilter);
+  document.getElementById("filter-banner-held").classList.toggle("on", !!codeFilter);
+  if (codeFilter) {
+    const label = `Showing only: ${codeFilter}`;
+    document.getElementById("filter-text-sorted").textContent = label;
+    document.getElementById("filter-text-held").textContent = label;
   }
-  await runScenarioById(id);
-  document.querySelector(".trace-panel").scrollIntoView({behavior: "smooth", block: "start"});
+
+  const sd = document.getElementById("p-sorted");
+  const sortedRows = s.sorted_out.filter(r => passesFilter(r.code));
+  sd.innerHTML = sortedRows.length ? sortedRows.map(r => `
+    <div class="srow${fl(r.n)}">
+      <div class="l1"><span class="n">#${r.n}</span><span class="amt">${RS(r.amount_paise)}</span>
+        <span class="bills">&rarr; ${esc(r.bills_label)}</span></div>
+      <div class="l2"><span class="badge">${badgeOf(s, r.code)}</span><span class="plain">${esc(r.code_plain)}</span>
+        <span class="sure ${r.sure_ok ? "ok" : "no"}">${esc(r.how_sure)}</span>
+        ${r.sorted_later ? '<span class="later">sorted out later</span>' : ""}</div>
+      <div class="money">${esc(moneyLabel(r))}</div>
+    </div>`).join("") : `<div class="empty">${codeFilter ? "Nothing of this type here." : "Nothing matched to a bill yet."}</div>`;
+
+  const hd = document.getElementById("p-held");
+  const heldRows = s.could_not_sort.filter(r => passesFilter(r.code));
+  hd.innerHTML = heldRows.length ? heldRows.map(r => `
+    <div class="qrow${fl(r.n)}">
+      <div class="l1"><span class="n">#${r.n}</span><span class="amt">${RS(r.amount_paise)}</span>
+        <span class="badge">${badgeOf(s, r.code)}</span></div>
+      <div class="reason">${esc(r.reason)}</div>
+      <button class="whybtn" data-pid="${r.payment_id}">Why?</button>
+      <div class="why" id="why-${r.payment_id}" hidden>${esc(r.why)}</div>
+    </div>`).join("") : `<div class="empty">${codeFilter ? "Nothing of this type here." : "Nothing is stuck so far."}</div>`;
+
+  const dd = document.getElementById("p-doing");
+  dd.innerHTML = s.doing_about_it.length ? s.doing_about_it.map(a => {
+    const open = expandedDrafts.has(a.action_id);
+    const sent = sentSet.has(a.action_id);
+    const draft = a.draft ? `
+      <button class="seebtn" data-act="${a.action_id}">${open ? "Hide the message" : "See the message"}</button>
+      <div class="draftbox" ${open ? "" : "hidden"}>
+        <pre>${esc(a.draft)}</pre>
+        <div class="draftbtns">
+          <button class="copybtn" data-act="${a.action_id}">Copy</button>
+          ${sent
+            ? '<span class="sent-note">&check; marked as sent</span>'
+            : `<button class="sendbtn" data-act="${a.action_id}">Send</button>`}
+        </div>
+      </div>` : "";
+    return `<div class="arow ${a.done ? "done" : ""}">
+      <div class="atop"><span class="mk">${a.done ? "&check;" : "&rarr;"}</span><span>${esc(a.text)}</span>
+        ${sent ? '<span class="senttag">&check; sent</span>' : ""}</div>
+      ${draft}
+    </div>`;
+  }).join("") : '<div class="empty">Nothing to chase yet.</div>';
+  document.getElementById("rightcol").classList.toggle("draft-open", expandedDrafts.size > 0);
+  dd.querySelectorAll(".sendbtn").forEach(btn => {
+    const action = s.doing_about_it.find(a => a.action_id === btn.dataset.act);
+    if (action && action.draft) attachHoverPreview(btn, action.draft);
+  });
+
+  // Newest row is always first (sorted_out/could_not_sort sort by -n) --
+  // scroll each panel back to the top so the row that just landed is
+  // visible without the viewer having to scroll up to find it.
+  ["p-sorted", "p-held", "p-doing"].forEach(id => {
+    document.getElementById(id).scrollTop = 0;
+  });
 }
 
-document.getElementById("ideas-tab").addEventListener("click", () => {
-  document.body.classList.add("ideas-open");
+function render() {
+  const s = frame();
+  renderTop(s);
+  renderPayList(s);
+  renderCentre(s);
+  renderRight(s);
+  document.getElementById("btn-prev").disabled = view === 0 || playing;
+  document.getElementById("btn-next").disabled = view >= CLOSING_VIEW || playing;
+  document.getElementById("btn-play").textContent = playing ? "Stop" : "Play";
+  document.getElementById("btn-reset").disabled = playing;
+  flashN = null;
+  if (view >= CLOSING_VIEW && !reachedEnd) {
+    reachedEnd = true;
+  }
+  document.getElementById("below-day").classList.toggle("on", reachedEnd);
+  if (reachedEnd) renderBelowDay(s);
+}
+
+function setView(v) {
+  view = Math.max(0, Math.min(v, CLOSING_VIEW));
+  flashN = (view >= 1 && view <= 64) ? view : null;
+  render();
+}
+
+function goNext() { if (!playing && view < CLOSING_VIEW) setView(view + 1); }
+function goPrev() { if (!playing && view > 0) setView(view - 1); }
+
+async function copyText(txt, btn) {
+  try { await navigator.clipboard.writeText(txt); }
+  catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+  const old = btn.textContent;
+  btn.textContent = "Copied";
+  setTimeout(() => { btn.textContent = old; }, 1500);
+}
+
+document.getElementById("paylist").addEventListener("click", e => {
+  const row = e.target.closest(".prow");
+  if (row && !playing) setView(Number(row.dataset.n));
 });
-document.getElementById("ideas-close").addEventListener("click", () => {
-  document.body.classList.remove("ideas-open");
+document.getElementById("btn-prev").addEventListener("click", goPrev);
+document.getElementById("btn-next").addEventListener("click", goNext);
+document.getElementById("btn-reset").addEventListener("click", async () => {
+  if (playing) return;
+  const r = await api("/process/reset", { method: "POST" });
+  H = r.history; sentSet = new Set(r.sent); view = 0; expandedDrafts.clear();
+  codeFilter = null; reachedEnd = false;
+  render();
+});
+document.getElementById("btn-play").addEventListener("click", async () => {
+  if (playing) { playing = false; render(); return; }
+  playing = true;
+  if (view >= CLOSING_VIEW) setView(0);
+  render();
+  while (view < CLOSING_VIEW && playing) {
+    await new Promise(res => setTimeout(res, view === 0 ? 500 : 260));
+    if (!playing) break;
+    setView(view + 1);
+  }
+  playing = false;
+  render();
+});
+document.addEventListener("keydown", e => {
+  if (!document.getElementById("workspace-wrap").classList.contains("on")) return;
+  const t = (e.target.tagName || "");
+  if (t === "INPUT" || t === "TEXTAREA" || e.target.isContentEditable) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
 });
 
-/* -- Upgrade 3: with/without toggle ---------------------------------- */
-document.getElementById("mode-with").addEventListener("click", () => setViewMode("with"));
-document.getElementById("mode-without").addEventListener("click", () => setViewMode("without"));
-
-function setViewMode(mode) {
-  document.getElementById("with-agent-view").style.display = mode === "with" ? "block" : "none";
-  document.getElementById("without-agent-view").style.display = mode === "without" ? "block" : "none";
-  document.getElementById("mode-with").classList.toggle("active", mode === "with");
-  document.getElementById("mode-without").classList.toggle("active", mode === "without");
-}
-
-/* -- Upgrade 2: Play mode --------------------------------------------- */
-const play = {running: false, paused: false, index: 0, payments: [], speedMs: 300};
-let lastBatchSize = null;
-function playBtnLabel() {
-  return lastBatchSize ? `▶ Play the ${lastBatchSize}-payment batch` : "▶ Play the submission batch";
-}
-
-document.getElementById("speed").addEventListener("input", e => {
-  play.speedMs = parseInt(e.target.value, 10);
-  document.getElementById("speed-value").textContent = `${play.speedMs}ms/payment`;
+document.getElementById("p-held").addEventListener("click", e => {
+  const btn = e.target.closest(".whybtn");
+  if (!btn) return;
+  const box = document.getElementById("why-" + btn.dataset.pid);
+  if (box) { box.hidden = !box.hidden; btn.textContent = box.hidden ? "Why?" : "Hide"; }
 });
-
-function updatePlayProgress() {
-  const total = play.payments.length;
-  document.getElementById("play-progress").textContent = `${play.index} / ${total}`;
-  document.getElementById("progress-fill").style.width = total ? `${(play.index / total) * 100}%` : "0%";
-}
-
-async function playLoop() {
-  if (!play.running || play.paused) return;
-  if (play.index >= play.payments.length) {
-    stopPlay();
-    toast("Batch playback complete");
+document.getElementById("p-doing").addEventListener("click", async e => {
+  const see = e.target.closest(".seebtn");
+  if (see) {
+    const id = see.dataset.act;
+    if (expandedDrafts.has(id)) expandedDrafts.delete(id); else expandedDrafts.add(id);
+    renderRight(frame());
     return;
   }
-  const p = play.payments[play.index];
-  const resp = await api("/payment", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      amount_paise: p.amount_paise, virtual_account: p.virtual_account,
-      payer_name: p.payer_name, narration: p.narration, method: p.method,
-      payment_id: p.payment_id, created_at: p.created_at,
-    }),
+  const cp = e.target.closest(".copybtn");
+  if (cp) { copyText(cp.closest(".draftbox").querySelector("pre").textContent, cp); return; }
+  const sd = e.target.closest(".sendbtn");
+  if (sd) {
+    sd.disabled = true;
+    try {
+      const r = await api("/process/action/send", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action_id: sd.dataset.act }),
+      });
+      sentSet = new Set(r.sent); render();
+    } catch (err) { alert(err.message); sd.disabled = false; }
+  }
+});
+document.getElementById("clear-filter-sorted").addEventListener("click", () => { codeFilter = null; render(); });
+document.getElementById("clear-filter-held").addEventListener("click", () => { codeFilter = null; render(); });
+
+/* ================= Below the day: summary table + charts ================= */
+function renderSummaryTable(s) {
+  const body = document.getElementById("summary-body");
+  body.innerHTML = s.summary_by_code.map(r => `
+    <tr class="clickable ${codeFilter === r.code ? "active-filter" : ""}" data-code="${r.code}">
+      <td><span class="badge">${esc(r.badge)}</span></td>
+      <td>${esc(r.plain)}</td>
+      <td class="num">${r.count}</td>
+      <td class="num">${RS(r.value_paise)}</td>
+      <td class="explain">${esc(r.explain)}</td>
+    </tr>`).join("");
+  body.querySelectorAll("tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      codeFilter = codeFilter === tr.dataset.code ? null : tr.dataset.code;
+      render();
+      document.querySelector(".rightcol").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
-  await handlePaymentResponse(resp, p);
-  play.index += 1;
-  updatePlayProgress();
-  if (play.running && !play.paused) setTimeout(playLoop, play.speedMs);
 }
 
-function stopPlay() {
-  play.running = false;
-  play.paused = false;
-  document.getElementById("play-btn").style.display = "";
-  document.getElementById("play-btn").disabled = false;
-  document.getElementById("play-btn").textContent = playBtnLabel();
-  document.getElementById("pause-btn").style.display = "none";
+function renderHeadlineNumbers(s) {
+  document.getElementById("head-done").textContent = s.buckets.auto_posted;
+  document.getElementById("head-check").textContent = s.buckets.needs_confirmation;
+  document.getElementById("head-held").textContent = s.buckets.exceptions;
 }
 
-document.getElementById("play-btn").addEventListener("click", async () => {
-  if (play.running) return;
-  hideStoryBanner();
-  const btn = document.getElementById("play-btn");
-  btn.disabled = true;
-  btn.textContent = "Loading batch…";
-  const data = await api("/reset_batch", {method: "POST"});
-  lastBatchSize = data.payments.length;
-  play.running = true;
-  play.paused = false;
-  play.index = 0;
-  play.payments = data.payments;
-  play.speedMs = parseInt(document.getElementById("speed").value, 10);
-  renderState(data.state);
-  document.getElementById("trace-content").innerHTML = '<div class="trace-empty">Playing the batch…</div>';
-  updatePlayProgress();
-  btn.style.display = "none";
-  btn.disabled = false;
-  document.getElementById("pause-btn").style.display = "";
-  playLoop();
+let chartsRendered = false;
+function renderBelowDay(s) {
+  renderSummaryTable(s);
+  renderHeadlineNumbers(s);
+  // The dial chart is rendered from this same walkthrough's own
+  // threshold_curve (state.py's _proc_threshold_curve, built with the
+  // exact bucket_payments() call the headline boxes use) -- every time,
+  // not just once -- so it always tallies with 31/17/16 above.
+  renderLine(document.getElementById("chart-line"), s.threshold_curve, s.threshold);
+  if (!chartsRendered) {
+    chartsRendered = true;
+    renderReportCharts();
+  }
+}
+
+/* -- charts: hand-rolled inline SVG, no dependencies (dataviz skill).
+   Reads /report_summary -- the real, already-scored out/results.json,
+   completely unaffected by how this page reorders the walkthrough.
+   Three charts, one colour scheme shared with the rest of the page:
+   good/warn/bad are the same "done automatically / needed a quick
+   check / could not sort" colours as the headline numbers and badges
+   everywhere else. */
+const CHART = {
+  good: "#16A34A", warn: "#D97706", bad: "#DC2626", grey: "#6B7A99",
+  text: "#0B1E3D", text2: "#445068", muted: "#6B7A99", grid: "#E4E8F0", surface: "#ffffff",
+};
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function renderHBar(container, rows, valueFmt) {
+  if (!rows.length) { container.innerHTML = '<div class="chart-empty">No exceptions.</div>'; return; }
+  const W = 260, barH = 18, gap = 10, leftPad = 68, rightPad = 54, topPad = 4;
+  const H = rows.length * (barH + gap) - gap + topPad * 2;
+  const maxVal = Math.max(...rows.map(r => Math.abs(r.value_paise)), 1);
+  const plotW = W - leftPad - rightPad;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": "Where the stuck money is, by reason code -- all could-not-sort exceptions" });
+  rows.forEach((r, i) => {
+    const y = topPad + i * (barH + gap);
+    const w = Math.max(2, (Math.abs(r.value_paise) / maxVal) * plotW);
+    const label = svgEl("text", { x: leftPad - 6, y: y + barH / 2 + 3.5, "text-anchor": "end",
+      "font-size": "10", fill: CHART.text2, "font-family": "inherit" });
+    label.textContent = r.code;
+    const bar = svgEl("rect", { x: leftPad, y, width: w, height: barH, rx: 4, fill: CHART.bad });
+    const title = svgEl("title", {});
+    title.textContent = `${r.code}: ${valueFmt(r.value_paise)}`;
+    bar.appendChild(title);
+    const valLabel = svgEl("text", { x: leftPad + w + 5, y: y + barH / 2 + 3.5,
+      "font-size": "10", fill: CHART.text, "font-family": "inherit" });
+    valLabel.textContent = valueFmt(r.value_paise);
+    svg.appendChild(label);
+    svg.appendChild(bar);
+    svg.appendChild(valLabel);
+  });
+  container.innerHTML = "";
+  container.appendChild(svg);
+}
+
+function renderLine(container, curve, defaultThreshold) {
+  // Same three buckets as the headline boxes, from the same
+  // bucket_payments() call (state.py's _proc_threshold_curve) -- so this
+  // chart can never disagree with 31/17/16. All three always sum to 64
+  // at every threshold; could_not_sort is flat because AMBIG-N/NO-MATCH/
+  // SUSPENSE are exceptions regardless of the confidence dial.
+  const W = 280, H = 210, padL = 30, padR = 10, padT = 14, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxY = Math.max(...curve.map(c => Math.max(c.auto_matched, c.human_touches, c.could_not_sort)), 1);
+  const xScale = t => padL + (t / 100) * plotW;
+  const yScale = v => padT + plotH - (v / maxY) * plotH;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": "Confidence dial trade-off: auto-matched, human touches and could-not-sort, at every dial setting -- always summing to 64" });
+  for (let i = 0; i <= 3; i++) {
+    const v = Math.round((maxY / 3) * i), y = yScale(v);
+    svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: y, y2: y, stroke: CHART.grid, "stroke-width": 1 }));
+    const t = svgEl("text", { x: padL - 4, y: y + 3, "text-anchor": "end", "font-size": "9", fill: CHART.muted, "font-family": "inherit" });
+    t.textContent = v;
+    svg.appendChild(t);
+  }
+  const seriesDefs = [
+    { key: "auto_matched", color: CHART.good, label: "Done automatically" },
+    { key: "human_touches", color: CHART.warn, label: "Needed a quick check" },
+    { key: "could_not_sort", color: CHART.bad, label: "Could not sort" },
+  ];
+  const atDefault = curve.find(c => c.threshold === defaultThreshold) || curve[curve.length - 1];
+
+  seriesDefs.forEach(s => {
+    const d = curve.map((c, j) => `${j === 0 ? "M" : "L"}${xScale(c.threshold)},${yScale(c[s.key])}`).join(" ");
+    svg.appendChild(svgEl("path", { d, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    // labelled dot where each line crosses the dial marker, not just the
+    // last point on the curve -- that's the number that must match the
+    // headline boxes.
+    const dot = svgEl("circle", { cx: xScale(atDefault.threshold), cy: yScale(atDefault[s.key]), r: 4,
+      fill: s.color, stroke: CHART.surface, "stroke-width": 2 });
+    const title = svgEl("title", {});
+    title.textContent = `${s.label} at dial ${atDefault.threshold}: ${atDefault[s.key]}`;
+    dot.appendChild(title);
+    svg.appendChild(dot);
+  });
+
+  // Value labels beside the dial line, decluttered: two lines can sit
+  // one unit apart (17 vs 16) which is only a few pixels on this scale --
+  // enough that the dots themselves nearly touch. Stack the LABELS
+  // top-to-bottom with a minimum gap, and draw a short leader from each
+  // dot's true position to its (possibly displaced) label so a reader
+  // can still tell which number belongs to which dot.
+  const minGap = 13;
+  const dotX = xScale(atDefault.threshold);
+  const labelRows = seriesDefs
+    .map(s => ({ s, dotY: yScale(atDefault[s.key]), y: yScale(atDefault[s.key]) }))
+    .sort((a, b) => a.dotY - b.dotY);
+  for (let i = 1; i < labelRows.length; i++) {
+    if (labelRows[i].y - labelRows[i - 1].y < minGap) labelRows[i].y = labelRows[i - 1].y + minGap;
+  }
+  labelRows.forEach(({ s, dotY, y }) => {
+    if (Math.abs(y - dotY) > 1.5) {
+      svg.appendChild(svgEl("line", { x1: dotX + 5, y1: dotY, x2: dotX + 12, y2: y,
+        stroke: s.color, "stroke-width": 1 }));
+    }
+    const valLbl = svgEl("text", { x: dotX + 14, y: y + 3,
+      "font-size": "10.5", "font-weight": "700", fill: s.color, "font-family": "inherit" });
+    valLbl.textContent = atDefault[s.key];
+    svg.appendChild(valLbl);
+  });
+  const dialX = xScale(atDefault.threshold);
+  svg.appendChild(svgEl("line", { x1: dialX, x2: dialX, y1: padT, y2: H - padB, stroke: CHART.text2,
+    "stroke-width": 1, "stroke-dasharray": "3,3" }));
+  const dialLbl = svgEl("text", { x: dialX, y: padT - 4, "text-anchor": "middle", "font-size": "9",
+    fill: CHART.text2, "font-family": "inherit" });
+  dialLbl.textContent = `dial ${atDefault.threshold}`;
+  svg.appendChild(dialLbl);
+  // x-axis label: direction, not raw threshold numbers -- a lay reader
+  // doesn't know what "0..100" means here, but "stricter" reads on sight.
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: H - padB, y2: H - padB, stroke: CHART.grid, "stroke-width": 1 }));
+  const axisLbl = svgEl("text", { x: W - padR, y: H - padB + 14, "text-anchor": "end", "font-size": "10",
+    "font-weight": "600", fill: CHART.text2, "font-family": "inherit" });
+  axisLbl.textContent = "Stricter →";
+  svg.appendChild(axisLbl);
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = seriesDefs.map(s => `<span class="chart-legend-item"><span class="chart-swatch" style="background:${s.color}"></span>${s.label} (${atDefault[s.key]})</span>`).join("");
+  container.innerHTML = "";
+  container.appendChild(svg);
+  container.appendChild(legend);
+}
+
+function renderGroupedBar(container, metrics, submission, holdout) {
+  const W = 640, H = 260, padL = 40, padR = 10, padT = 16, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const groupW = plotW / metrics.length;
+  const barW = Math.min(60, groupW / 2 - 14);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+    "aria-label": "Submission vs holdout: match rate, precision, recall -- holdout is the honest number" });
+  [0, 0.5, 1].forEach(f => {
+    const y = padT + plotH - f * plotH;
+    svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: y, y2: y, stroke: CHART.grid, "stroke-width": 1 }));
+    const t = svgEl("text", { x: padL - 6, y: y + 4, "text-anchor": "end", "font-size": "11", fill: CHART.muted, "font-family": "inherit" });
+    t.textContent = Math.round(f * 100) + "%";
+    svg.appendChild(t);
+  });
+  metrics.forEach((m, i) => {
+    const groupX = padL + i * groupW;
+    const subVal = submission[m.key] ?? 0;
+    const holdVal = holdout ? (holdout[m.key] ?? 0) : 0;
+    const subX = groupX + groupW / 2 - barW - 4;
+    const holdX = groupX + groupW / 2 + 4;
+    const subBar = svgEl("rect", { x: subX, y: padT + plotH - subVal * plotH, width: barW,
+      height: subVal * plotH, rx: 5, fill: CHART.grey });
+    const subTitle = svgEl("title", {});
+    subTitle.textContent = `Submission ${m.label}: ${(subVal * 100).toFixed(1)}%`;
+    subBar.appendChild(subTitle);
+    svg.appendChild(subBar);
+    const subValLbl = svgEl("text", { x: subX + barW / 2, y: padT + plotH - subVal * plotH - 6,
+      "text-anchor": "middle", "font-size": "11", "font-weight": "600", fill: CHART.text, "font-family": "inherit" });
+    subValLbl.textContent = (subVal * 100).toFixed(0) + "%";
+    svg.appendChild(subValLbl);
+    if (holdout) {
+      const holdBar = svgEl("rect", { x: holdX, y: padT + plotH - holdVal * plotH, width: barW,
+        height: holdVal * plotH, rx: 5, fill: CHART.bad });
+      const holdTitle = svgEl("title", {});
+      holdTitle.textContent = `Holdout ${m.label}: ${(holdVal * 100).toFixed(1)}%`;
+      holdBar.appendChild(holdTitle);
+      svg.appendChild(holdBar);
+      const holdValLbl = svgEl("text", { x: holdX + barW / 2, y: padT + plotH - holdVal * plotH - 6,
+        "text-anchor": "middle", "font-size": "11", "font-weight": "600", fill: CHART.text, "font-family": "inherit" });
+      holdValLbl.textContent = (holdVal * 100).toFixed(0) + "%";
+      svg.appendChild(holdValLbl);
+    }
+    const lbl = svgEl("text", { x: groupX + groupW / 2, y: H - padB + 18, "text-anchor": "middle",
+      "font-size": "12", "font-weight": "600", fill: CHART.text2, "font-family": "inherit" });
+    lbl.textContent = m.label;
+    svg.appendChild(lbl);
+  });
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = `<span class="chart-legend-item"><span class="chart-swatch" style="background:${CHART.grey}"></span>Submission (my own data)</span>` +
+    (holdout ? `<span class="chart-legend-item"><span class="chart-swatch" style="background:${CHART.bad}"></span>Holdout (written to break it)</span>` : "");
+  container.innerHTML = "";
+  container.appendChild(svg);
+  container.appendChild(legend);
+}
+
+async function renderReportCharts() {
+  // The dial chart is NOT rendered here -- it comes from this walkthrough's
+  // own data (see renderBelowDay) so it can never disagree with the
+  // headline boxes. This only covers the two charts that are genuinely
+  // about the committed, already-scored submission/holdout comparison.
+  let s;
+  try { s = await api("/report_summary"); } catch (err) { s = { available: false }; }
+  if (!s.available) {
+    ["chart-hbar", "chart-groupedbar"].forEach(id => {
+      document.getElementById(id).innerHTML = '<div class="chart-empty">Run python -m scoring.score first.</div>';
+    });
+    return;
+  }
+  renderHBar(document.getElementById("chart-hbar"), s.exception_by_code, RS);
+  renderGroupedBar(document.getElementById("chart-groupedbar"),
+    [{ key: "match_rate", label: "Match rate" }, { key: "precision", label: "Precision" }, { key: "recall", label: "Recall" }],
+    s, s.holdout);
+}
+
+/* ================= Ask the ledger: floating chat widget =================
+   Strictly read-only on the server (see simulator/ask_ledger.py and
+   state.ask_process()'s docstrings) -- this widget only ever calls
+   POST /process/ask (a question in, an answer out) and POST
+   /process/action/send (marks a draft sent on screen, same endpoint the
+   "doing about it" panel already uses -- nothing is actually sent). */
+
+/* -- hover preview: the full drafted email, shown on hover so it can be
+   read without clicking. Reused by every Send button, in the "doing
+   about it" panel and inside the chat widget. -- */
+function attachHoverPreview(el, draftText) {
+  if (!draftText) return;
+  let popup = null;
+  const show = () => {
+    if (popup) return;
+    popup = document.createElement("div");
+    popup.className = "hover-preview";
+    popup.innerHTML = `<pre>${esc(draftText)}</pre>`;
+    document.body.appendChild(popup);
+    const r = el.getBoundingClientRect();
+    const w = popup.offsetWidth, h = popup.offsetHeight;
+    // Anchor to the button's left edge by default; flip to the button's
+    // right edge (growing leftward) if that would run off the right
+    // side of the screen -- the common case for the chat widget, whose
+    // buttons sit near the right edge already. Clamp afterwards so it
+    // can't run off the left edge either.
+    let left = r.left;
+    if (left + w > window.innerWidth - 8) left = r.right - w;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    let top = r.top - h - 8;
+    if (top < 4) top = r.bottom + 8;
+    popup.style.left = left + "px";
+    popup.style.top = top + "px";
+  };
+  const hide = () => { if (popup) { popup.remove(); popup = null; } };
+  el.addEventListener("mouseenter", show);
+  el.addEventListener("mouseleave", hide);
+  el.addEventListener("focus", show);
+  el.addEventListener("blur", hide);
+}
+
+async function sendActionAndRefresh(actionId) {
+  const r = await api("/process/action/send", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action_id: actionId }),
+  });
+  sentSet = new Set(r.sent);
+  // Update every button for this action, wherever it appears (the "doing
+  // about it" panel, and any past chat answer that drafted the same
+  // email) -- without re-rendering chat history.
+  document.querySelectorAll(`[data-email-action="${actionId}"]`).forEach(btn => {
+    btn.textContent = "✓ Sent"; btn.classList.add("sent"); btn.disabled = true;
+  });
+  if (document.getElementById("workspace-wrap").classList.contains("on")) renderRight(frame());
+}
+
+function renderCustomerCard(ca) {
+  const group = (label, cls, rows) => rows.length
+    ? `<div class="cc-group ${cls}"><div class="cc-label">${esc(label)}</div>${rows.join("")}</div>` : "";
+
+  const paidRows = ca.paid_in_full.map(inv => `<div class="cc-row"><b>${esc(inv.invoice_id)}</b> `
+    + `${RS(inv.amount_paise)}${inv.paid_by_n ? ` <span class="cc-sub">paid by payment #${inv.paid_by_n}</span>` : ""}</div>`);
+  const partRows = ca.partly_paid.map(inv => `<div class="cc-row"><b>${esc(inv.invoice_id)}</b> `
+    + `${RS(inv.amount_paise)} billed, ${RS(inv.received_paise)} received, `
+    + `${RS(inv.owed_paise)} still open</div>`);
+  const noneRows = ca.nothing_received.map(inv => `<div class="cc-row"><b>${esc(inv.invoice_id)}</b> ${RS(inv.amount_paise)}</div>`);
+
+  let stuck = "";
+  if (ca.could_not_sort.length) {
+    const rows = ca.could_not_sort.map(r => `<div class="cc-row">#${r.n} ${RS(r.amount_paise)} `
+      + `<span class="cc-sub">${esc(r.reason)}</span></div>`).join("");
+    const emailBtn = ca.action && ca.action.draft
+      ? `<button type="button" class="cc-email-btn${ca.action.sent ? " sent" : ""}" `
+        + `data-email-action="${ca.action.action_id}" ${ca.action.sent ? "disabled" : ""}>`
+        + `${ca.action.sent ? "✓ Sent" : "Send email"}</button>` : "";
+    stuck = `<div class="cc-group cc-stuck"><div class="cc-label">Payments we could not sort</div>${rows}`
+      + `<div class="cc-stuck-total">&rarr; ${RS(ca.could_not_sort_total_paise)} waiting on `
+      + `${esc(ca.name)} to say which bills these were for</div>${emailBtn}</div>`;
+  }
+
+  return `<div class="chat-customer">
+    <div class="cc-head">${esc(ca.name)}<span class="cc-acct">${esc(ca.account_number)}</span></div>
+    ${group("Paid in full", "cc-paid", paidRows)}
+    ${group("Partly paid", "cc-partial", partRows)}
+    ${group("Nothing received yet", "cc-none", noneRows)}
+    <div class="cc-totals">
+      <div>Total billed: <b>${RS(ca.total_billed_paise)}</b></div>
+      <div>Total received: <b>${RS(ca.total_received_paise)}</b></div>
+      <div>Still owed: <b>${RS(ca.still_owed_paise)}</b></div>
+    </div>
+    ${stuck}
+  </div>`;
+}
+
+const CHAT_CHIPS = [
+  "Who owes us the most?",
+  "How much is stuck and why?",
+  "Tell me about Deccan Textiles",
+];
+
+let chatMessages = [];   // {role: "user"|"bot", text, customer?} -- survives close/reopen
+let chatOpen = false;
+
+function renderChatChips() {
+  if (chatMessages.length > 0) return "";
+  return `<div class="chat-chips">
+    <div class="chat-chips-label">Try asking:</div>
+    ${CHAT_CHIPS.map(q => `<button type="button" class="chat-chip">${esc(q)}</button>`).join("")}
+  </div>`;
+}
+
+function renderChat() {
+  const body = document.getElementById("chat-body");
+  body.innerHTML = chatMessages.map(m => {
+    if (m.role === "user") return `<div class="chat-msg user">${esc(m.text)}</div>`;
+    const aiTag = m.aiUsed ? '<span class="chat-ai-tag">AI</span>' : "";
+    const content = m.customer ? renderCustomerCard(m.customer) : esc(m.text);
+    return `<div class="chat-msg bot">${aiTag}${content}</div>`;
+  }).join("") + renderChatChips();
+  body.querySelectorAll(".chat-chip").forEach(btn => {
+    btn.addEventListener("click", () => askChat(btn.textContent));
+  });
+  body.querySelectorAll(".cc-email-btn:not(.sent)").forEach(btn => {
+    const ca = chatMessages.map(m => m.customer).find(c => c && c.action
+      && c.action.action_id === btn.dataset.emailAction);
+    if (ca) attachHoverPreview(btn, ca.action.draft);
+    btn.addEventListener("click", () => sendActionAndRefresh(btn.dataset.emailAction));
+  });
+  body.scrollTop = body.scrollHeight;
+}
+
+async function askChat(question) {
+  question = (question || "").trim();
+  if (!question) return;
+  chatMessages.push({ role: "user", text: question });
+  renderChat();
+  const input = document.getElementById("chat-input");
+  input.value = "";
+  const sendBtn = document.getElementById("chat-send");
+  sendBtn.disabled = true;
+
+  const body = document.getElementById("chat-body");
+  const thinking = document.createElement("div");
+  thinking.className = "chat-msg bot thinking";
+  thinking.textContent = "Thinking…";
+  body.appendChild(thinking);
+  body.scrollTop = body.scrollHeight;
+
+  // last few turns, so a follow-up like "why is that one still open?"
+  // can be understood -- see simulator/state.py's ask_process().
+  const history = chatMessages.slice(-8).map(m => ({ role: m.role === "user" ? "user" : "assistant", text: m.text }));
+
+  try {
+    // Answer from the SAME step the page is currently showing -- at
+    // step 0 (nothing processed) the ledger must report zero received
+    // and every bill fully open, not the fully-processed end state.
+    const r = await api("/process/ask", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question, history, step: view }),
+    });
+    chatMessages.push({ role: "bot", text: r.answer, aiUsed: r.ai_used, customer: r.customer });
+  } catch (err) {
+    chatMessages.push({ role: "bot", text: "Sorry, I couldn't reach the ledger just now." });
+  }
+  renderChat();
+  sendBtn.disabled = false;
+  document.getElementById("chat-input").focus();
+}
+
+document.getElementById("chat-fab").addEventListener("click", () => {
+  chatOpen = true;
+  document.getElementById("chat-panel").hidden = false;
+  renderChat();
+  document.getElementById("chat-input").focus();
+});
+document.getElementById("chat-close").addEventListener("click", () => {
+  chatOpen = false;
+  document.getElementById("chat-panel").hidden = true;
+});
+document.getElementById("chat-send").addEventListener("click", () => askChat(document.getElementById("chat-input").value));
+document.getElementById("chat-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); askChat(document.getElementById("chat-input").value); }
 });
 
-document.getElementById("pause-btn").addEventListener("click", () => {
-  play.paused = !play.paused;
-  const btn = document.getElementById("pause-btn");
-  btn.textContent = play.paused ? "▶ Resume" : "⏸ Pause";
-  if (!play.paused) playLoop();
+/* -- boot -------------------------------------------------------------- */
+api("/process/state").then(r => {
+  renderArrival(r.arrival);
+  H = r.history; sentSet = new Set(r.sent); view = 0;
+  CLOSING_VIEW = r.total_steps;
+}).catch(e => {
+  document.getElementById("arrival-headline").textContent = "Could not load: " + e.message;
 });
-
-(async function init() {
-  document.body.classList.add("ideas-open");
-  renderIdeas();
-  await loadScenarios();
-  const snapshot = await api("/state");
-  renderState(snapshot);
-})();
 </script>
 </body>
 </html>

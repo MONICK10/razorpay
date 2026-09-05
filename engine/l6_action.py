@@ -63,10 +63,7 @@ def draft_customer_query(payment: dict, customer_name: str, rationale: str) -> s
             "Ask them to confirm which invoice(s) this payment was intended to "
             "settle. Keep it under 120 words, no subject line, sign off as "
             "'Accounts Team'. Plain text only.")
-        response = client.messages.create(
-            model="claude-opus-5", max_tokens=400,
-            messages=[{"role": "user", "content": prompt}])
-        return response.content[0].text.strip()
+        return client.complete(prompt, max_tokens=400)
     except Exception as exc:
         logger.warning("L6 action: draft_customer_query failed (%s), falling back", exc)
         return _stub_query(payment, customer_name, rationale)
@@ -107,10 +104,7 @@ def draft_statement(customer_name: str, total_invoiced_paise: int,
             "confirmed, and ask them to flag it if this doesn't match their "
             "records. Under 120 words, no subject line, sign off as "
             "'Accounts Team'. Plain text only.")
-        response = client.messages.create(
-            model="claude-opus-5", max_tokens=400,
-            messages=[{"role": "user", "content": prompt}])
-        return response.content[0].text.strip()
+        return client.complete(prompt, max_tokens=400)
     except Exception as exc:
         logger.warning("L6 action: draft_statement failed (%s), falling back", exc)
         return _stub_statement(customer_name, total_invoiced_paise,
